@@ -26,13 +26,13 @@
   --dark-bg: #050505;
   --card-bg: #0f0f0f;
   --border-color: #262626;
-  --fep-green: #dc2626; 
+  --fep-green: #dc2626;
 }
 
-body { 
-  font-family: var(--font-sans); 
+body {
+  font-family: var(--font-sans);
   background-color: #000000;
-  color: #f3f4f6; 
+  color: #f3f4f6;
   overflow-x: hidden;
 }
 
@@ -85,7 +85,7 @@ body::before {
   justify-content: space-around;
   min-width: 280px;
   position: relative;
-  flex-grow: 1; 
+  flex-grow: 1;
 }
 
 .match-card {
@@ -100,8 +100,14 @@ body::before {
   overflow: hidden;
 }
 
-.match-card.editable { cursor: pointer; }
-.match-card.editable:hover { border-color: var(--neon-blue); box-shadow: 0 0 10px var(--neon-blue-glow); }
+.match-card.editable {
+  cursor: pointer;
+}
+
+.match-card.editable:hover {
+  border-color: var(--neon-blue);
+  box-shadow: 0 0 10px var(--neon-blue-glow);
+}
 
 .card-header {
   font-size: 0.7rem;
@@ -109,7 +115,7 @@ body::before {
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  background-color: #3b82f6; 
+  background-color: #3b82f6;
   padding: 0.4rem 0.75rem;
   border-bottom: 1px solid var(--border-color);
   display: flex;
@@ -125,12 +131,29 @@ body::before {
   transition: background-color 0.2s;
   height: 38px;
 }
-.team-row:last-child { border-bottom: none; }
 
-.team-row.winner { font-weight: 800; background-color: rgba(255,255,255,0.03); }
-.team-row.winner .team-name { color: white; }
-.team-row.loser .team-name { opacity: 0.6; }
-.team-row.empty-slot .team-name { color: #6b7280; font-style: italic; font-weight: normal; }
+.team-row:last-child {
+  border-bottom: none;
+}
+
+.team-row.winner {
+  font-weight: 800;
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+.team-row.winner .team-name {
+  color: white;
+}
+
+.team-row.loser .team-name {
+  opacity: 0.6;
+}
+
+.team-row.empty-slot .team-name {
+  color: #6b7280;
+  font-style: italic;
+  font-weight: normal;
+}
 
 .team-name {
   font-size: 0.75rem;
@@ -156,7 +179,11 @@ body::before {
   align-items: center;
   justify-content: center;
 }
-.team-row.winner .score-box { font-weight: 800; color: white; }
+
+.team-row.winner .score-box {
+  font-weight: 800;
+  color: white;
+}
 
 .card-footer {
   display: flex;
@@ -164,7 +191,7 @@ body::before {
   font-size: 0.65rem;
   color: #9ca3af;
   padding: 0.4rem 0.75rem;
-  background-color: rgba(0,0,0,0.3);
+  background-color: rgba(0, 0, 0, 0.3);
 }
 
 .bracket-column:not(:last-child) .match-card:not(.invisible-match)::after {
@@ -178,26 +205,60 @@ body::before {
   z-index: 0;
 }
 
-.invisible-match { visibility: hidden; pointer-events: none; height: 105px; margin: 1rem 0; border:none; box-shadow: none; }
+.invisible-match {
+  visibility: hidden;
+  pointer-events: none;
+  height: 105px;
+  margin: 1rem 0;
+  border: none;
+  box-shadow: none;
+}
 
 @keyframes fadeUp {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-.animate-fade-up { animation: fadeUp 0.3s ease-out forwards; }
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
 
-::-webkit-scrollbar { height: 8px; width: 8px; }
-::-webkit-scrollbar-track { background: var(--dark-bg); }
-::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fadeUp 0.3s ease-out forwards;
+}
+
+::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--dark-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #374151;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4b5563;
+}
 
 /* Modal Styles */
-dialog::backdrop { background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(4px); }
-dialog { 
-  background: var(--card-bg); 
-  color: white; 
-  border: 1px solid var(--border-color); 
-  border-radius: 1rem; 
+dialog::backdrop {
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(4px);
+}
+
+dialog {
+  background: var(--card-bg);
+  color: white;
+  border: 1px solid var(--border-color);
+  border-radius: 1rem;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
   max-width: 500px;
   width: 90%;
@@ -210,8 +271,9 @@ dialog {
   border: 1px solid var(--border-color);
   background-color: #1f2937;
   margin-bottom: 1rem;
-  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.2);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
 }
+
 .fep-schedule-header {
   background-color: var(--fep-green);
   color: white;
@@ -221,6 +283,7 @@ dialog {
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
+
 .fep-schedule-team-row {
   display: flex;
   justify-content: space-between;
@@ -230,15 +293,18 @@ dialog {
   align-items: center;
   height: 38px;
 }
+
 .fep-schedule-team-row.winner-row {
   font-weight: 800;
-  background-color: rgba(255,255,255,0.03);
+  background-color: rgba(255, 255, 255, 0.03);
 }
+
 .fep-schedule-scores {
   display: flex;
   gap: 0;
   height: 100%;
 }
+
 .fep-schedule-score-box {
   width: 32px;
   text-align: center;
@@ -250,10 +316,12 @@ dialog {
   color: #d1d5db;
   background-color: #1f2937;
 }
+
 .winner-row .fep-schedule-score-box {
   font-weight: 800;
   color: white;
 }
+
 .fep-schedule-footer {
   background-color: #374151;
   color: #9ca3af;
@@ -261,9 +329,20 @@ dialog {
   padding: 0.35rem 0.75rem;
 }
 
-.nav-link { cursor: pointer; transition: color 0.2s; }
-.nav-link:hover { color: var(--neon-blue); }
-.nav-link.active { color: var(--neon-blue); font-weight: bold; border-bottom: 2px solid var(--neon-blue); }
+.nav-link {
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.nav-link:hover {
+  color: var(--neon-blue);
+}
+
+.nav-link.active {
+  color: var(--neon-blue);
+  font-weight: bold;
+  border-bottom: 2px solid var(--neon-blue);
+}
 
 .player-card {
   background: var(--card-bg);
@@ -272,7 +351,12 @@ dialog {
   overflow: hidden;
   transition: transform 0.2s;
 }
-.player-card:hover { transform: translateY(-5px); border-color: var(--neon-blue); }
+
+.player-card:hover {
+  transform: translateY(-5px);
+  border-color: var(--neon-blue);
+}
+
 .player-img-container {
   width: 100%;
   height: 200px;
@@ -282,4 +366,9 @@ dialog {
   justify-content: center;
   overflow: hidden;
 }
-.player-img { width: 100%; height: 100%; object-fit: cover; }
+
+.player-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
