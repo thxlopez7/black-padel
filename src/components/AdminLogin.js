@@ -50,7 +50,7 @@ export default function AdminLogin({ onLoginSuccess, onCancel }) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full bg-gray-950 border border-gray-800 rounded p-3 text-white outline-none focus:border-red-600 transition-colors"
-              placeholder="admin@copaprimavera.com"
+              placeholder="admin@blackpadel.com"
               required
             />
           </div>

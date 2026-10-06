@@ -657,7 +657,7 @@ export default function TournamentApp({ initialCategories }) {
             {/* Columna Izquierda */}
             <div className="lg:col-span-8 flex flex-col gap-6">
               <div className="rounded-2xl overflow-hidden shadow-2xl border border-gray-800 bg-gray-950/80 backdrop-blur-sm flex justify-center">
-                <img src="/flyer.png" alt="Flyer Black Padel" className="w-full max-w-2xl h-auto object-contain" onError={(e) => { e.target.src = "https://placehold.co/800x400/0a192f/bfff00?text=COPA+PRIMAVERA+FLYER"; }} />
+                <img src="/flyer.png" alt="Flyer Black Padel" className="w-full max-w-2xl h-auto object-contain" onError={(e) => { e.target.src = "https://placehold.co/800x400/0a192f/bfff00?text=BLACK+PADEL+FLYER"; }} />
               </div>
               <div className="bg-gray-900/80 backdrop-blur-md border border-gray-800 rounded-2xl p-6 shadow-xl">
                 <h2 className="text-2xl font-title text-white mb-6 border-b border-gray-800 pb-3 uppercase tracking-wider">Selecciona tu <span className="font-bold text-red-500">Categoría</span></h2>
