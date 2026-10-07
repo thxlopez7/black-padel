@@ -806,20 +806,20 @@ export default function TournamentApp({ initialCategories }) {
                 <h2 className="text-4xl font-title text-white uppercase tracking-widest">Panel de <span className="font-bold text-red-500">Administración</span></h2>
                 <p className="text-xs text-gray-400 mt-1 uppercase tracking-widest font-bold">Dashboard General - Circuito Black Pádel</p>
               </div>
-              <div className="flex gap-2">
-                <button onClick={() => setView("admin_global_schedule")} className="bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500 hover:text-white font-semibold py-2 px-4 rounded-lg text-xs transition-colors shadow-md flex items-center gap-2">
+              <div className="flex gap-2 overflow-x-auto w-full pb-2 custom-scrollbar">
+                <button onClick={() => setView("admin_global_schedule")} className="flex-shrink-0 whitespace-nowrap bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500 hover:text-white font-semibold py-2 px-4 rounded-lg text-xs transition-colors shadow-md flex items-center gap-2">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
                   Gestor de Horarios
                 </button>
-                <button onClick={() => setView("admin_payments")} className="bg-red-600/10 text-red-500 border border-red-600/20 hover:bg-red-600 hover:text-gray-900 font-semibold py-2 px-4 rounded-lg text-xs transition-colors shadow-md flex items-center gap-2">
+                <button onClick={() => setView("admin_payments")} className="flex-shrink-0 whitespace-nowrap bg-red-600/10 text-red-500 border border-red-600/20 hover:bg-red-600 hover:text-gray-900 font-semibold py-2 px-4 rounded-lg text-xs transition-colors shadow-md flex items-center gap-2">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                   Inscripciones
                 </button>
-                <button onClick={handleAutoPilot} className="bg-pink-500/10 text-pink-400 border border-pink-500/20 hover:bg-pink-500 hover:text-white font-semibold py-2 px-4 rounded-lg text-xs transition-colors shadow-md flex items-center gap-2">
+                <button onClick={handleAutoPilot} className="flex-shrink-0 whitespace-nowrap bg-pink-500/10 text-pink-400 border border-pink-500/20 hover:bg-pink-500 hover:text-white font-semibold py-2 px-4 rounded-lg text-xs transition-colors shadow-md flex items-center gap-2">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
                   Piloto Automático
                 </button>
-                <button onClick={() => setView("admin_players")} className="bg-gray-800 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-lg text-xs transition-colors border border-gray-600 shadow-md flex items-center gap-2 hidden md:flex">
+                <button onClick={() => setView("admin_players")} className="flex-shrink-0 whitespace-nowrap bg-gray-800 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-lg text-xs transition-colors border border-gray-600 shadow-md flex items-center gap-2">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
                   Jugadores
                 </button>
