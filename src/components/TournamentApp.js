@@ -18,14 +18,17 @@ import AdminGlobalScheduleSetup from "./AdminGlobalScheduleSetup";
 
 function AdminSetup({ category, players, courts, onBack, onGenerate }) {
   const categoryPlayers = players.filter(p => p.category_id === category.id);
-  const initialPairs = Array(category.num_pairs || 6).fill('');
+  const supportedSizes = [6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32];
+  const requiredSize = supportedSizes.find(s => s >= Math.max(6, categoryPlayers.length)) || 32;
+  const initialNum = category.current_step === 'bracket' ? (category.num_pairs || requiredSize) : requiredSize;
+
+  const [numPairs, setNumPairs] = useState(initialNum);
+  const initialPairs = Array(initialNum).fill('');
   categoryPlayers.forEach((p, idx) => {
     if (idx < initialPairs.length) {
       initialPairs[idx] = `${p.name}${p.partner ? ' & ' + p.partner : ''}`;
     }
   });
-
-  const [numPairs, setNumPairs] = useState(category.num_pairs || 6);
   const [pairs, setPairs] = useState(initialPairs);
 
   const handleNumPairsChange = (e) => {
@@ -52,12 +55,18 @@ function AdminSetup({ category, players, courts, onBack, onGenerate }) {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 border-b border-gray-800 pb-5 gap-4">
           <div>
             <h2 className="text-xl sm:text-2xl font-light text-white">Inscripción <span className="font-bold text-red-500">{category.name}</span></h2>
-            <p className="text-xs text-gray-400 mt-1">Si dejas espacios en blanco, se generarán "Pases Directos" (BYEs).</p>
+            <p className="text-xs text-gray-400 mt-1">
+              {categoryPlayers.length} {categoryPlayers.length === 1 ? 'pareja registrada' : 'parejas registradas'} (sin límite de cupo). Los espacios vacíos se completan como BYE.
+            </p>
           </div>
-          <div className="w-full md:w-48">
-            <label className="block text-gray-500 text-[10px] uppercase tracking-widest mb-1 font-bold">Tamaño del Cuadro</label>
+          <div className="w-full md:w-56">
+            <label className="block text-gray-500 text-[10px] uppercase tracking-widest mb-1 font-bold">Zonas a Generar</label>
             <select value={numPairs} onChange={handleNumPairsChange} className="w-full bg-gray-950 border border-gray-800 text-white rounded-lg p-2.5 sm:p-2 focus:border-red-600 outline-none cursor-pointer text-base sm:text-sm font-mono">
-              {[6,8,10,12,14,16,18,20,22,24,26,28,30,32].map(n => <option key={n} value={n}>{n} Parejas</option>)}
+              {supportedSizes.map(n => (
+                <option key={n} value={n}>
+                  {n/2} Zonas ({n} Parejas)
+                </option>
+              ))}
             </select>
           </div>
         </div>
@@ -268,11 +277,8 @@ export default function TournamentApp({ initialCategories }) {
     for (const cat of categories) {
       const catPlayers = players.filter(p => String(p.category_id) === String(cat.id));
       
-      // Determinar tamaño de cuadro soportado y suficiente para las parejas registradas
-      let numPairs = cat.num_pairs || 6;
-      if (catPlayers.length > numPairs) {
-        numPairs = supportedSizes.find(s => s >= catPlayers.length) || 32;
-      }
+      // Tamaño de cuadro dinámico para abarcar a todas las parejas inscriptas sin límite fijo
+      let numPairs = supportedSizes.find(s => s >= Math.max(6, catPlayers.length)) || 32;
 
       const pairs = Array(numPairs).fill('');
       catPlayers.forEach((p, idx) => {
@@ -679,19 +685,20 @@ export default function TournamentApp({ initialCategories }) {
                               <div>
                                 <span className="text-white font-bold text-base sm:text-lg">{cat.name}</span>
                                 <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mt-1">
-                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-widest ${
+                                  <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded border uppercase tracking-widest ${
                                     catPlayersCount > 0 
                                       ? 'text-red-400 bg-red-950/40 border-red-900/60' 
                                       : 'text-gray-400 bg-gray-900 border-gray-800'
                                   }`}>
                                     {catPlayersCount} {catPlayersCount === 1 ? 'Pareja Inscripta' : 'Parejas Inscriptas'}
                                   </span>
-                                  <span className="text-[10px] font-bold text-gray-400 bg-gray-900/80 px-2 py-0.5 rounded border border-gray-800 uppercase tracking-widest">
-                                    Cuadro: {cat.num_pairs || 8}
-                                  </span>
-                                  {cat.current_step === 'bracket' && (
+                                  {cat.current_step === 'bracket' ? (
                                     <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-900/60 uppercase tracking-widest">
                                       Cuadro Activo
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] font-bold text-gray-400 bg-gray-900/60 px-2 py-0.5 rounded border border-gray-800/80 uppercase tracking-widest">
+                                      Inscripciones Abiertas
                                     </span>
                                   )}
                                 </div>
