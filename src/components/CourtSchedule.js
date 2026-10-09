@@ -3,7 +3,7 @@
 export default function CourtSchedule({ court, matches, categories, onBack }) {
   // Filtrar los partidos que corresponden a esta cancha, que no sean "BYE", y ordenarlos por fecha y hora
   const courtMatches = matches
-    .filter(m => m.court_id === court.id && !m.is_bye)
+    .filter(m => m.court_id && String(m.court_id) === String(court.id) && !m.is_bye)
     .sort((a, b) => {
       let da = new Date((a.match_date || '2099-01-01') + 'T' + (a.match_time || '00:00'));
       let db = new Date((b.match_date || '2099-01-01') + 'T' + (b.match_time || '00:00'));
@@ -12,13 +12,13 @@ export default function CourtSchedule({ court, matches, categories, onBack }) {
 
   return (
     <div className="animate-fade-up max-w-4xl mx-auto w-full">
-      <button onClick={onBack} className="mb-4 text-gray-400 hover:text-white text-xs flex items-center gap-2 transition-colors bg-gray-900 py-2 px-4 rounded border border-gray-800 uppercase tracking-widest font-semibold">
+      <button onClick={onBack} className="mb-4 text-gray-400 hover:text-white text-xs flex items-center gap-2 transition-colors bg-gray-900 py-2.5 px-4 rounded-lg border border-gray-800 uppercase tracking-widest font-semibold">
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
         Volver al Panel
       </button>
 
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 shadow-2xl">
-        <h2 className="text-xl font-light text-white mb-6 border-b border-gray-800 pb-3">
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 sm:p-8 shadow-2xl">
+        <h2 className="text-lg sm:text-xl font-light text-white mb-4 sm:mb-6 border-b border-gray-800 pb-3">
           Partidos en <span className="font-bold text-red-500">{court.name}</span>
         </h2>
         
@@ -37,7 +37,7 @@ export default function CourtSchedule({ court, matches, categories, onBack }) {
               const isP2Winner = m.winner === m.p2_name && m.p2_name;
 
               const dateStr = m.match_date ? `${m.match_date.split('-').reverse().join('/')}` : 'Fecha a definir';
-              const timeStr = m.match_time || '';
+              const timeStr = m.match_time ? m.match_time.slice(0, 5) : '';
 
               return (
                 <div key={m.id} className="bg-gray-950 border border-gray-800 rounded-xl overflow-hidden hover:border-gray-700 transition-colors">

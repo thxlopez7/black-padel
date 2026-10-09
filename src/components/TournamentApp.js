@@ -9,232 +9,12 @@ import AdminPlayers from "./AdminPlayers";
 import CourtSchedule from "./CourtSchedule";
 import AdminPayments from "./AdminPayments";
 import AdminLogin from "./AdminLogin";
+import AutoPilotModal from "./AutoPilotModal";
 import { PromptModal, Toast } from "./UIComponents";
 
 
+import AdminGlobalScheduleSetup from "./AdminGlobalScheduleSetup";
 
-
-function AdminGlobalScheduleSetup({ matches, categories, courts, onBack, onGenerateGlobal }) {
-  const [daysConfig, setDaysConfig] = useState([
-    { date: new Date().toISOString().split('T')[0], startTime: '09:00', endTime: '22:00', phase: 'grupos' }
-  ]);
-  const [matchDuration, setMatchDuration] = useState(60);
-  const [selectedCourts, setSelectedCourts] = useState([]);
-
-  useEffect(() => {
-    if (courts && courts.length > 0 && selectedCourts.length === 0) {
-      setSelectedCourts(courts.map(c => c.id));
-    }
-  }, [courts]);
-
-  const addDay = () => {
-    const lastDay = daysConfig[daysConfig.length - 1];
-    const nextDate = new Date(lastDay.date);
-    nextDate.setDate(nextDate.getDate() + 1);
-    setDaysConfig([...daysConfig, { date: nextDate.toISOString().split('T')[0], startTime: lastDay.startTime, endTime: lastDay.endTime, phase: lastDay.phase }]);
-  };
-
-  const removeDay = (index) => {
-    setDaysConfig(daysConfig.filter((_, i) => i !== index));
-  };
-
-  const updateDay = (index, field, value) => {
-    const newDays = [...daysConfig];
-    newDays[index][field] = value;
-    setDaysConfig(newDays);
-  };
-
-  const loadWeekendTemplate = () => {
-    const baseDateStr = daysConfig[0]?.date || new Date().toISOString().split('T')[0];
-    // Usamos 'T12:00:00' para evitar bugs de zona horaria al sumar días
-    const baseDate = new Date(baseDateStr + 'T12:00:00');
-    
-    const formatD = (d) => d.toISOString().split('T')[0];
-    
-    const d0 = formatD(baseDate); 
-    const d1 = formatD(new Date(baseDate.getTime() + 86400000)); 
-    const d2 = formatD(new Date(baseDate.getTime() + 86400000 * 2)); 
-    const d3 = formatD(new Date(baseDate.getTime() + 86400000 * 3)); 
-    
-    setDaysConfig([
-      { date: d0, startTime: '17:00', endTime: '23:45', phase: 'grupos' }, // 6 horas
-      { date: d1, startTime: '17:00', endTime: '23:45', phase: 'grupos' }, // 6 horas
-      { date: d2, startTime: '08:00', endTime: '23:45', phase: 'grupos' }, // 15 horas
-      { date: d3, startTime: '09:00', endTime: '15:00', phase: 'semis' },  // 6 horas
-      { date: d3, startTime: '16:00', endTime: '21:00', phase: 'finals' }  // 5 horas
-    ]);
-  };
-
-  const activeMatches = matches.filter(m => !m.is_bye);
-  let gruposCount = 0, semisCount = 0, finalsCount = 0;
-  categories.forEach(cat => {
-    const catMatches = activeMatches.filter(m => m.category_id === cat.id);
-    if(catMatches.length === 0) return;
-    const maxR = Math.max(...catMatches.map(m => m.round_index || 0));
-    catMatches.forEach(m => {
-       if (m.round_index === maxR && maxR > 0) finalsCount++;
-       else if (m.round_index === maxR - 1 && maxR > 1) semisCount++;
-       else gruposCount++;
-    });
-  });
-
-  const durationH = Number(matchDuration) / 60;
-  const cCount = courts.length > 0 ? courts.length : 1; 
-  const hGrupos = Math.ceil((gruposCount * durationH) / cCount);
-  const hSemis = Math.ceil((semisCount * durationH) / cCount);
-  const hFinals = Math.ceil((finalsCount * durationH) / cCount);
-  const jHrs = Math.ceil(hGrupos * 0.25);
-  const vHrs = Math.ceil(hGrupos * 0.25);
-  const sHrs = hGrupos - jHrs - vHrs;
-
-  return (
-    <div className="animate-fade-up max-w-4xl mx-auto w-full mt-2">
-      <button onClick={onBack} className="mb-4 text-gray-400 hover:text-white text-xs bg-gray-900 py-1.5 px-3 rounded border border-gray-800">
-        Volver al Panel
-      </button>
-      <div className="bg-gray-900 border border-gray-800 p-6 rounded-2xl shadow-2xl">
-        <h2 className="text-2xl font-light text-white mb-6 border-b border-gray-800 pb-3">Auto-Programador <span className="font-bold text-red-500">Global</span></h2>
-        
-        {/* Calculadora / Estimador */}
-        <div className="mb-8 bg-gray-950 border border-red-950/30 rounded-xl p-5 shadow-[0_0_15px_rgba(0,242,254,0.05)]">
-          <div className="flex items-center gap-3 mb-4 border-b border-gray-800 pb-3">
-            <div className="w-8 h-8 rounded-full bg-red-950/40 text-red-500 flex items-center justify-center">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
-            </div>
-            <div>
-              <h3 className="text-white font-bold text-sm tracking-widest uppercase">Estimador de Horas (Jue - Dom)</h3>
-              <p className="text-gray-500 text-[10px] uppercase">Basado en {categories.length} categorías, {courts.length} canchas y {matchDuration} min/partido</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-gray-900 border border-gray-800 rounded-lg p-3">
-              <p className="text-gray-500 text-[9px] uppercase tracking-widest font-bold">Jueves (Grupos)</p>
-              <p className="text-red-500 font-bold text-lg">{jHrs} <span className="text-xs font-normal">hrs/cancha</span></p>
-            </div>
-            <div className="bg-gray-900 border border-gray-800 rounded-lg p-3">
-              <p className="text-gray-500 text-[9px] uppercase tracking-widest font-bold">Viernes (Grupos)</p>
-              <p className="text-red-500 font-bold text-lg">{vHrs} <span className="text-xs font-normal">hrs/cancha</span></p>
-            </div>
-            <div className="bg-gray-900 border border-gray-800 rounded-lg p-3">
-              <p className="text-gray-500 text-[9px] uppercase tracking-widest font-bold">Sábado (Grupos)</p>
-              <p className="text-red-500 font-bold text-lg">{sHrs} <span className="text-xs font-normal">hrs/cancha</span></p>
-            </div>
-            <div className="bg-gray-900 border border-gray-800 rounded-lg p-3">
-              <p className="text-gray-500 text-[9px] uppercase tracking-widest font-bold">Domingo (Llaves)</p>
-              <p className="text-red-400 font-bold text-lg">{hSemis + hFinals} <span className="text-xs font-normal">hrs/cancha</span></p>
-            </div>
-          </div>
-        </div>
-
-        <div className="mb-6">
-           <div className="flex justify-between items-center mb-4">
-             <label className="block text-gray-500 text-[10px] uppercase tracking-widest">Días de Competencia y Horarios</label>
-             <div className="flex gap-2">
-               <button onClick={loadWeekendTemplate} className="bg-yellow-900/30 hover:bg-yellow-900/60 text-yellow-500 text-[10px] uppercase font-bold py-1 px-3 rounded border border-yellow-800 transition-colors">
-                 ⚡ Cargar Plantilla Jue-Dom
-               </button>
-               <button onClick={addDay} className="bg-red-950/30 hover:bg-red-950/60 text-red-500 text-[10px] uppercase font-bold py-1 px-3 rounded border border-red-900 transition-colors">
-                 + Agregar Día
-               </button>
-             </div>
-           </div>
-           
-           <div className="flex flex-col gap-3">
-             {daysConfig.map((day, idx) => (
-               <div key={idx} className="flex flex-wrap md:flex-nowrap gap-3 items-end bg-gray-950 p-3 rounded-xl border border-gray-800">
-                 <div className="flex-1">
-                   <label className="block text-gray-600 text-[9px] uppercase tracking-widest mb-1">Fecha</label>
-                   <input type="date" value={day.date} onChange={e => updateDay(idx, 'date', e.target.value)} className="w-full bg-gray-900 border border-gray-800 text-white rounded p-2 focus:border-red-600 outline-none text-sm" />
-                 </div>
-                 <div className="flex-1">
-                   <label className="block text-gray-600 text-[9px] uppercase tracking-widest mb-1">Fase Asignada</label>
-                   <select value={day.phase} onChange={e => updateDay(idx, 'phase', e.target.value)} className="w-full bg-gray-900 border border-gray-800 text-white rounded p-2 focus:border-red-600 outline-none text-sm">
-                     <option value="grupos">Grupos y Eliminatorias Previas</option>
-                     <option value="semis">Solo Semifinales</option>
-                     <option value="finals">Solo Finales</option>
-                   </select>
-                 </div>
-                 <div className="w-auto">
-                   <label className="block text-gray-600 text-[9px] uppercase tracking-widest mb-1">Inicio (24h)</label>
-                   <div className="flex items-center gap-1">
-                     <select value={day.startTime.split(':')[0]} onChange={e => {
-                       const m = day.startTime.split(':')[1];
-                       updateDay(idx, 'startTime', `${e.target.value}:${m}`);
-                     }} className="bg-gray-900 border border-gray-800 text-white rounded p-2 focus:border-red-600 outline-none text-sm text-center cursor-pointer">
-                       {Array.from({length: 24}, (_, i) => i.toString().padStart(2, '0')).map(h => <option key={h} value={h}>{h}</option>)}
-                     </select>
-                     <span className="text-gray-500 font-bold">:</span>
-                     <select value={day.startTime.split(':')[1]} onChange={e => {
-                       const h = day.startTime.split(':')[0];
-                       updateDay(idx, 'startTime', `${h}:${e.target.value}`);
-                     }} className="bg-gray-900 border border-gray-800 text-white rounded p-2 focus:border-red-600 outline-none text-sm text-center cursor-pointer">
-                       {['00','15','30','45'].map(m => <option key={m} value={m}>{m}</option>)}
-                     </select>
-                   </div>
-                 </div>
-                 <div className="w-auto">
-                   <label className="block text-gray-600 text-[9px] uppercase tracking-widest mb-1">Cierre (24h)</label>
-                   <div className="flex items-center gap-1">
-                     <select value={day.endTime.split(':')[0]} onChange={e => {
-                       const m = day.endTime.split(':')[1];
-                       updateDay(idx, 'endTime', `${e.target.value}:${m}`);
-                     }} className="bg-gray-900 border border-gray-800 text-white rounded p-2 focus:border-red-600 outline-none text-sm text-center cursor-pointer">
-                       {Array.from({length: 24}, (_, i) => i.toString().padStart(2, '0')).map(h => <option key={h} value={h}>{h}</option>)}
-                     </select>
-                     <span className="text-gray-500 font-bold">:</span>
-                     <select value={day.endTime.split(':')[1]} onChange={e => {
-                       const h = day.endTime.split(':')[0];
-                       updateDay(idx, 'endTime', `${h}:${e.target.value}`);
-                     }} className="bg-gray-900 border border-gray-800 text-white rounded p-2 focus:border-red-600 outline-none text-sm text-center cursor-pointer">
-                       {['00','15','30','45'].map(m => <option key={m} value={m}>{m}</option>)}
-                     </select>
-                   </div>
-                 </div>
-                 {daysConfig.length > 1 && (
-                   <button onClick={() => removeDay(idx)} className="bg-red-900/20 text-red-400 p-2 rounded hover:bg-red-900/40 border border-red-900/30 transition-colors h-[38px] flex items-center justify-center">
-                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                   </button>
-                 )}
-               </div>
-             ))}
-           </div>
-        </div>
-
-        <div className="mb-6">
-           <label className="block text-gray-500 text-[10px] uppercase tracking-widest mb-2">Duración del Partido (minutos)</label>
-           <input type="number" value={matchDuration} onChange={e => setMatchDuration(Number(e.target.value))} className="w-full md:w-1/3 bg-gray-950 border border-gray-800 text-white rounded p-2 focus:border-red-600 outline-none text-sm" />
-        </div>
-        
-        <div className="mb-8">
-           <label className="block text-gray-500 text-[10px] uppercase tracking-widest mb-2">Canchas Disponibles</label>
-           <div className="flex flex-wrap gap-3">
-             {courts && courts.length > 0 ? courts.map(c => (
-               <label key={c.id} className="flex items-center gap-2 bg-gray-950 border border-gray-800 px-3 py-2 rounded-lg cursor-pointer hover:border-gray-600 transition-colors">
-                 <input 
-                   type="checkbox" 
-                   checked={selectedCourts.includes(c.id)} 
-                   onChange={e => {
-                     if (e.target.checked) setSelectedCourts([...selectedCourts, c.id]);
-                     else setSelectedCourts(selectedCourts.filter(id => id !== c.id));
-                   }} 
-                   className="accent-red-600 w-4 h-4"
-                 />
-                 <span className="text-sm font-bold text-gray-200">{c.name}</span>
-               </label>
-             )) : <span className="text-xs text-gray-500">No hay canchas configuradas</span>}
-           </div>
-        </div>
-        
-        <button 
-          onClick={() => onGenerateGlobal({ daysConfig, matchDurationMin: matchDuration, courts: courts.filter(c => selectedCourts.includes(c.id)) })} 
-          className="w-full bg-red-700 hover:bg-red-600 text-white font-bold py-4 rounded-xl shadow-lg shadow-red-950/50 transition-all uppercase tracking-widest text-sm"
-        >
-          Aplicar Calendario Inteligente a todo el Torneo
-        </button>
-      </div>
-    </div>
-  );
-}
 
 function AdminSetup({ category, players, courts, onBack, onGenerate }) {
   const categoryPlayers = players.filter(p => p.category_id === category.id);
@@ -264,18 +44,19 @@ function AdminSetup({ category, players, courts, onBack, onGenerate }) {
 
   return (
     <div className="animate-fade-up max-w-4xl mx-auto w-full mt-2">
-      <button onClick={onBack} className="mb-4 text-gray-400 hover:text-white text-xs bg-gray-900 py-1.5 px-3 rounded border border-gray-800">
+      <button onClick={onBack} className="mb-4 text-gray-400 hover:text-white text-xs bg-gray-900 py-2 px-3.5 rounded-lg border border-gray-800 font-semibold flex items-center gap-2">
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
         Volver al Panel
       </button>
-      <div className="bg-gray-900 border border-gray-800 p-6 rounded-2xl shadow-2xl">
+      <div className="bg-gray-900 border border-gray-800 p-4 sm:p-6 rounded-2xl shadow-2xl">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 border-b border-gray-800 pb-5 gap-4">
           <div>
-            <h2 className="text-2xl font-light text-white">Inscripción <span className="font-bold text-red-500">{category.name}</span></h2>
+            <h2 className="text-xl sm:text-2xl font-light text-white">Inscripción <span className="font-bold text-red-500">{category.name}</span></h2>
             <p className="text-xs text-gray-400 mt-1">Si dejas espacios en blanco, se generarán "Pases Directos" (BYEs).</p>
           </div>
           <div className="w-full md:w-48">
-            <label className="block text-gray-500 text-[9px] uppercase tracking-widest mb-1">Tamaño del Cuadro</label>
-            <select value={numPairs} onChange={handleNumPairsChange} className="w-full bg-gray-950 border border-gray-800 text-white rounded p-2 focus:border-red-600 outline-none cursor-pointer text-sm font-mono">
+            <label className="block text-gray-500 text-[10px] uppercase tracking-widest mb-1 font-bold">Tamaño del Cuadro</label>
+            <select value={numPairs} onChange={handleNumPairsChange} className="w-full bg-gray-950 border border-gray-800 text-white rounded-lg p-2.5 sm:p-2 focus:border-red-600 outline-none cursor-pointer text-base sm:text-sm font-mono">
               {[6,8,10,12,14,16,18,20,22,24,26,28,30,32].map(n => <option key={n} value={n}>{n} Parejas</option>)}
             </select>
           </div>
@@ -292,7 +73,7 @@ function AdminSetup({ category, players, courts, onBack, onGenerate }) {
                 value={p === 'BYE' ? '' : p} 
                 onChange={(e) => handlePairChange(i, e.target.value)}
                 placeholder="Dejar en blanco para generar BYE automático" 
-                className="bg-gray-950 border border-gray-800 text-gray-200 rounded p-2 focus:border-red-600 outline-none text-sm w-full transition-colors"
+                className="bg-gray-950 border border-gray-800 text-gray-200 rounded-lg p-3 sm:p-2 focus:border-red-600 outline-none text-base sm:text-sm w-full transition-colors"
               />
             </div>
           ))}
@@ -300,42 +81,42 @@ function AdminSetup({ category, players, courts, onBack, onGenerate }) {
         
         <div className="mt-8 pt-6 border-t border-gray-800">
           <div className="mb-4">
-            <h3 className="text-sm font-bold text-white uppercase tracking-widest mb-2">Gestión del Cuadro de Eliminación</h3>
+            <h3 className="text-xs sm:text-sm font-bold text-white uppercase tracking-widest mb-2">Gestión del Cuadro de Eliminación</h3>
             {category.current_step === 'bracket' ? (
-              <div className="bg-red-950/20 border border-red-900 rounded p-3 mb-4 flex items-center justify-between">
+              <div className="bg-red-950/20 border border-red-900 rounded-xl p-3.5 mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                  <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-red-600 animate-pulse"></div>
                     <span className="text-red-500 text-xs font-bold uppercase tracking-widest">Cuadro Generado y Activo</span>
                  </div>
-                 <div className="flex gap-2">
-                   <button onClick={() => onBack('view_bracket')} className="bg-red-700 hover:bg-red-600 text-white text-xs py-1.5 px-3 rounded font-bold transition-colors">
+                 <div className="flex gap-2 w-full sm:w-auto">
+                   <button onClick={() => onBack('view_bracket')} className="flex-1 sm:flex-none bg-red-700 hover:bg-red-600 text-white text-xs py-2 px-3 rounded-lg font-bold transition-colors text-center">
                      Ir al Cuadro
                    </button>
                    <button onClick={() => {
                      if(confirm('¿Estás seguro de que quieres borrar el cuadro entero? Perderás todos los resultados cargados.')) {
                         onBack('delete_bracket');
                      }
-                   }} className="bg-red-900/40 hover:bg-red-900/80 text-red-400 border border-red-900/50 text-xs py-1.5 px-3 rounded font-bold transition-colors">
+                   }} className="flex-1 sm:flex-none bg-red-900/40 hover:bg-red-900/80 text-red-400 border border-red-900/50 text-xs py-2 px-3 rounded-lg font-bold transition-colors text-center">
                      Borrar Cuadro
                    </button>
                  </div>
               </div>
             ) : (
-              <div className="bg-gray-950 border border-gray-800 rounded p-3 mb-4">
+              <div className="bg-gray-950 border border-gray-800 rounded-xl p-3.5 mb-4">
                  <span className="text-gray-500 text-xs font-bold uppercase tracking-widest">Aún no se ha generado un cuadro para esta categoría.</span>
               </div>
             )}
           </div>
           
-          <div className="flex flex-col sm:flex-row gap-4 mt-6">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mt-6">
             <button onClick={() => {
               onGenerate(numPairs, pairs, false);
-            }} className="w-full bg-gray-800 hover:bg-gray-700 text-white border border-gray-600 font-bold py-3 px-6 rounded-lg text-xs uppercase tracking-widest transition-colors">
+            }} className="w-full bg-gray-800 hover:bg-gray-700 text-white border border-gray-600 font-bold py-3.5 sm:py-3 px-6 rounded-lg text-xs uppercase tracking-widest transition-colors">
               Generar (Orden Inscriptos)
             </button>
             <button onClick={() => {
               onGenerate(numPairs, pairs, true);
-            }} className="w-full neon-button bg-red-600/10 font-bold py-3 px-6 rounded-lg text-xs uppercase tracking-widest flex justify-center items-center gap-2">
+            }} className="w-full neon-button bg-red-600/10 font-bold py-3.5 sm:py-3 px-6 rounded-lg text-xs uppercase tracking-widest flex justify-center items-center gap-2">
               Generar Sorteo Aleatorio
             </button>
           </div>
@@ -359,6 +140,7 @@ export default function TournamentApp({ initialCategories }) {
   const [promptConfig, setPromptConfig] = useState(null);
   const [expandedPair, setExpandedPair] = useState(null);
   const [publicPlayersCatId, setPublicPlayersCatId] = useState("all");
+  const [showAutoPilotModal, setShowAutoPilotModal] = useState(false);
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -419,8 +201,6 @@ export default function TournamentApp({ initialCategories }) {
   };
 
   const handleGenerateGlobalSchedule = async (config) => {
-    if(!confirm("¿Estás seguro de sobreescribir todos los horarios actuales? Esto asignará nuevos turnos a todos los partidos basándose en las prioridades.")) return;
-    
     showToast("Calculando y guardando calendario...");
     
     const newSchedule = generateGlobalSchedule(matches, categories, config);
@@ -481,13 +261,19 @@ export default function TournamentApp({ initialCategories }) {
   }, []);
 
   const handleAutoPilot = async () => {
-    if (!confirm("¿Piloto Automático? Esto borrará TODOS los cuadros actuales, cerrará inscripciones, sorteará los cruces aleatoriamente para TODAS las categorías y te dejará listo para usar el Gestor de Horarios. ¿Deseas continuar?")) return;
+    showToast("Piloto Automático en progreso. Generando cruces...");
     
-    showToast("Piloto Automático iniciado. Generando sorteos...");
+    const supportedSizes = [6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32];
     
     for (const cat of categories) {
-      const catPlayers = players.filter(p => p.category_id === cat.id);
-      const numPairs = cat.num_pairs || 6;
+      const catPlayers = players.filter(p => String(p.category_id) === String(cat.id));
+      
+      // Determinar tamaño de cuadro soportado y suficiente para las parejas registradas
+      let numPairs = cat.num_pairs || 6;
+      if (catPlayers.length > numPairs) {
+        numPairs = supportedSizes.find(s => s >= catPlayers.length) || 32;
+      }
+
       const pairs = Array(numPairs).fill('');
       catPlayers.forEach((p, idx) => {
         if (idx < pairs.length) {
@@ -500,7 +286,7 @@ export default function TournamentApp({ initialCategories }) {
       
       await deleteMatchesByCategory(cat.id);
       await saveGeneratedMatches(generatedMatches);
-      await updateCategory(cat.id, { current_step: 'bracket' });
+      await updateCategory(cat.id, { num_pairs: numPairs, current_step: 'bracket' });
     }
     
     const fetchedMatches = await getMatches();
@@ -508,7 +294,7 @@ export default function TournamentApp({ initialCategories }) {
     const fetchedCat = await getCategories();
     setCategories(fetchedCat);
     
-    showToast("Piloto Automático finalizado. Puede utilizar el Gestor de Horarios.");
+    showToast("Piloto Automático finalizado. Cruces generados con éxito.");
   };
 
   const handleMatchUpdate = async (updatedMatch) => {
@@ -537,6 +323,12 @@ export default function TournamentApp({ initialCategories }) {
         }
         setMatches([...currentMatches]);
       }
+    }
+
+    // 3. Sincronizar directamente con la base de datos de Supabase
+    const freshMatches = await getMatches();
+    if (freshMatches && freshMatches.length > 0) {
+      setMatches(freshMatches);
     }
   };
 
@@ -573,14 +365,14 @@ export default function TournamentApp({ initialCategories }) {
   return (
     <>
       <header className="w-full bg-black/80 backdrop-blur-md border-b border-gray-800 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex justify-between items-center">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 h-14 sm:h-16 flex justify-between items-center">
           <div 
-            className="cursor-pointer hover:opacity-80 transition-opacity flex items-center gap-3"
+            className="cursor-pointer hover:opacity-80 transition-opacity flex items-center gap-2 sm:gap-3"
             onClick={() => { setMode("public"); setView("home"); }}
           >
-            <h1 className="text-xl md:text-2xl font-title text-white tracking-widest">
-              <img src="/logo.png" alt="Black Club" className="h-16 md:h-20 w-auto object-contain" />
-            </h1>
+            <div className="flex items-center">
+              <img src="/logo.png" alt="Black Club" className="h-8 sm:h-11 w-auto object-contain" />
+            </div>
           </div>
           
           {mode === "public" && (
@@ -597,7 +389,7 @@ export default function TournamentApp({ initialCategories }) {
           <div>
             {mode === "public" ? (
               <button 
-                className="bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold py-1.5 px-4 rounded text-xs transition-colors border border-gray-700"
+                className="bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold py-2 px-3 sm:px-4 rounded-lg text-xs transition-colors border border-gray-700"
                 onClick={() => {
                   if (session) {
                     setMode("admin");
@@ -610,18 +402,18 @@ export default function TournamentApp({ initialCategories }) {
                 Acceso Admin
               </button>
             ) : (
-              <div className="flex gap-2">
+              <div className="flex gap-1.5 sm:gap-2">
                 <button 
-                  className="bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold py-1.5 px-4 rounded text-xs transition-colors border border-gray-700"
+                  className="bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold py-1.5 sm:py-2 px-2.5 sm:px-4 rounded-lg text-[11px] sm:text-xs transition-colors border border-gray-700 flex items-center gap-1"
                   onClick={() => {
                     setMode("public");
                     setView("home");
                   }}
                 >
-                  Volver al Torneo
+                  <span className="hidden sm:inline">Volver al</span> Torneo
                 </button>
                 <button 
-                  className="bg-red-900/40 hover:bg-red-900/80 text-red-400 font-semibold py-1.5 px-4 rounded text-xs transition-colors border border-red-900/50"
+                  className="bg-red-900/40 hover:bg-red-900/80 text-red-400 font-semibold py-1.5 sm:py-2 px-2.5 sm:px-4 rounded-lg text-[11px] sm:text-xs transition-colors border border-red-900/50 flex items-center gap-1"
                   onClick={async () => {
                     await logoutAdmin();
                     setSession(null);
@@ -630,7 +422,7 @@ export default function TournamentApp({ initialCategories }) {
                     showToast("Sesión cerrada");
                   }}
                 >
-                  Cerrar Sesión
+                  Salir
                 </button>
               </div>
             )}
@@ -801,25 +593,25 @@ export default function TournamentApp({ initialCategories }) {
 
         {mode === "admin" && view === "admin_home" && (
           <div className="animate-fade-up">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b border-gray-800 pb-4 gap-4">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 border-b border-gray-800 pb-4 gap-4">
               <div>
-                <h2 className="text-4xl font-title text-white uppercase tracking-widest">Panel de <span className="font-bold text-red-500">Administración</span></h2>
-                <p className="text-xs text-gray-400 mt-1 uppercase tracking-widest font-bold">Dashboard General - Circuito Black Pádel</p>
+                <h2 className="text-2xl sm:text-4xl font-title text-white uppercase tracking-widest">Panel de <span className="font-bold text-red-500">Administración</span></h2>
+                <p className="text-[10px] sm:text-xs text-gray-400 mt-1 uppercase tracking-widest font-bold">Dashboard General - Circuito Black Pádel</p>
               </div>
-              <div className="flex gap-2 overflow-x-auto w-full pb-2 custom-scrollbar">
-                <button onClick={() => setView("admin_global_schedule")} className="flex-shrink-0 whitespace-nowrap bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500 hover:text-white font-semibold py-2 px-4 rounded-lg text-xs transition-colors shadow-md flex items-center gap-2">
+              <div className="flex gap-2 overflow-x-auto w-full md:w-auto pb-2 md:pb-0 no-scrollbar touch-pan-x items-center">
+                <button onClick={() => setView("admin_global_schedule")} className="flex-shrink-0 whitespace-nowrap bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500 hover:text-white font-semibold py-2.5 px-3.5 sm:px-4 rounded-xl text-xs transition-colors shadow-md flex items-center gap-2">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
                   Gestor de Horarios
                 </button>
-                <button onClick={() => setView("admin_payments")} className="flex-shrink-0 whitespace-nowrap bg-red-600/10 text-red-500 border border-red-600/20 hover:bg-red-600 hover:text-gray-900 font-semibold py-2 px-4 rounded-lg text-xs transition-colors shadow-md flex items-center gap-2">
+                <button onClick={() => setView("admin_payments")} className="flex-shrink-0 whitespace-nowrap bg-red-600/10 text-red-500 border border-red-600/20 hover:bg-red-600 hover:text-gray-900 font-semibold py-2.5 px-3.5 sm:px-4 rounded-xl text-xs transition-colors shadow-md flex items-center gap-2">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                   Inscripciones
                 </button>
-                <button onClick={handleAutoPilot} className="flex-shrink-0 whitespace-nowrap bg-pink-500/10 text-pink-400 border border-pink-500/20 hover:bg-pink-500 hover:text-white font-semibold py-2 px-4 rounded-lg text-xs transition-colors shadow-md flex items-center gap-2">
+                <button onClick={() => setShowAutoPilotModal(true)} className="flex-shrink-0 whitespace-nowrap bg-pink-500/10 text-pink-400 border border-pink-500/20 hover:bg-pink-500 hover:text-white font-semibold py-2.5 px-3.5 sm:px-4 rounded-xl text-xs transition-colors shadow-md flex items-center gap-2">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
                   Piloto Automático
                 </button>
-                <button onClick={() => setView("admin_players")} className="flex-shrink-0 whitespace-nowrap bg-gray-800 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-lg text-xs transition-colors border border-gray-600 shadow-md flex items-center gap-2">
+                <button onClick={() => setView("admin_players")} className="flex-shrink-0 whitespace-nowrap bg-gray-800 hover:bg-gray-700 text-white font-semibold py-2.5 px-3.5 sm:px-4 rounded-xl text-xs transition-colors border border-gray-600 shadow-md flex items-center gap-2">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
                   Jugadores
                 </button>
@@ -827,66 +619,66 @@ export default function TournamentApp({ initialCategories }) {
             </div>
 
             {/* ESTADISTICAS */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-               <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 flex items-center gap-4 shadow-xl">
-                 <div className="w-12 h-12 bg-red-600/20 text-red-500 rounded-full flex items-center justify-center">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-6 mb-6 sm:mb-8">
+               <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 sm:p-5 flex items-center gap-4 shadow-xl">
+                 <div className="w-11 h-11 sm:w-12 sm:h-12 bg-red-600/20 text-red-500 rounded-xl flex items-center justify-center shrink-0">
                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
                  </div>
                  <div>
                    <p className="text-gray-500 text-[10px] uppercase tracking-widest font-bold">Total Jugadores</p>
-                   <p className="text-2xl font-bold text-white">{players.length}</p>
+                   <p className="text-xl sm:text-2xl font-bold text-white">{players.length}</p>
                  </div>
                </div>
-               <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 flex items-center gap-4 shadow-xl">
-                 <div className="w-12 h-12 bg-red-500/20 text-red-400 rounded-full flex items-center justify-center">
+               <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 sm:p-5 flex items-center gap-4 shadow-xl">
+                 <div className="w-11 h-11 sm:w-12 sm:h-12 bg-red-500/20 text-red-400 rounded-xl flex items-center justify-center shrink-0">
                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
                  </div>
                  <div>
                    <p className="text-gray-500 text-[10px] uppercase tracking-widest font-bold">Categorías Activas</p>
-                   <p className="text-2xl font-bold text-white">{categories.length}</p>
+                   <p className="text-xl sm:text-2xl font-bold text-white">{categories.length}</p>
                  </div>
                </div>
-               <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 flex items-center gap-4 shadow-xl">
-                 <div className="w-12 h-12 bg-white/20 text-gray-300 rounded-full flex items-center justify-center">
+               <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 sm:p-5 flex items-center gap-4 shadow-xl">
+                 <div className="w-11 h-11 sm:w-12 sm:h-12 bg-white/20 text-gray-300 rounded-xl flex items-center justify-center shrink-0">
                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                  </div>
                  <div>
                    <p className="text-gray-500 text-[10px] uppercase tracking-widest font-bold">Canchas Habilitadas</p>
-                   <p className="text-2xl font-bold text-white">{courts.length}</p>
+                   <p className="text-xl sm:text-2xl font-bold text-white">{courts.length}</p>
                  </div>
                </div>
             </div>
             
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
                {/* Categorias */}
-               <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 shadow-xl flex flex-col">
-                  <div className="flex justify-between items-center mb-6 border-b border-gray-800 pb-3">
-                    <h3 className="text-lg font-bold text-white">Categorías del Torneo</h3>
-                    <button className="bg-red-600 text-gray-900 hover:bg-red-500 font-bold py-1.5 px-3 rounded text-[10px] uppercase tracking-widest transition-colors shadow-lg" onClick={handleAddCategory}>
+               <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 sm:p-6 shadow-xl flex flex-col">
+                  <div className="flex justify-between items-center mb-5 sm:mb-6 border-b border-gray-800 pb-3">
+                    <h3 className="text-base sm:text-lg font-bold text-white">Categorías del Torneo</h3>
+                    <button className="bg-red-600 text-gray-900 hover:bg-red-500 font-bold py-1.5 px-3 rounded-lg text-[10px] uppercase tracking-widest transition-colors shadow-lg" onClick={handleAddCategory}>
                       + Nueva Categoría
                     </button>
                   </div>
-                  <div className="flex flex-col gap-4 mb-4 overflow-y-auto max-h-[500px] custom-scrollbar pr-2">
+                  <div className="flex flex-col gap-3 sm:gap-4 mb-4 overflow-y-auto max-h-[500px] custom-scrollbar pr-1">
                     {categories.length === 0 && <p className="text-gray-500 text-sm italic">No hay categorías. Crea una nueva.</p>}
                     {categories.map(cat => (
                        <div key={cat.id} className="flex flex-col bg-gray-950 border border-gray-800 p-4 rounded-xl group hover:border-gray-700 transition-colors">
-                          <div className="flex justify-between items-start mb-4">
+                          <div className="flex justify-between items-start mb-3">
                             <div>
-                              <span className="text-white font-bold text-lg">{cat.name}</span>
+                              <span className="text-white font-bold text-base sm:text-lg">{cat.name}</span>
                               <div className="flex items-center gap-2 mt-1">
                                 <span className="text-[10px] font-bold text-red-500 bg-red-950/30 px-2 py-0.5 rounded border border-red-900 uppercase tracking-widest">{cat.num_pairs} Parejas</span>
                                 {cat.current_step === 'bracket' && <span className="text-[10px] font-bold text-gray-300 bg-gray-800/30 px-2 py-0.5 rounded border border-gray-700 uppercase tracking-widest">Cuadro Activo</span>}
                               </div>
                             </div>
-                            <button onClick={() => handleDeleteCategory(cat.id, cat.name)} className="text-gray-600 hover:text-red-400 p-1 transition-colors" title="Eliminar Categoría">
+                            <button onClick={() => handleDeleteCategory(cat.id, cat.name)} className="text-gray-500 hover:text-red-400 p-1.5 transition-colors" title="Eliminar Categoría">
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                             </button>
                           </div>
                           <div className="flex gap-2">
-                            <button onClick={() => { setActiveCatId(cat.id); setView("admin_setup"); }} className="flex-1 bg-gray-800 hover:bg-gray-700 text-white font-semibold text-xs py-2 rounded-lg border border-gray-700 transition-colors">Gestionar Cuadro</button>
+                            <button onClick={() => { setActiveCatId(cat.id); setView("admin_setup"); }} className="flex-1 bg-gray-800 hover:bg-gray-700 text-white font-semibold text-xs py-2.5 rounded-lg border border-gray-700 transition-colors text-center">Gestionar Cuadro</button>
                             <button 
                                onClick={() => { setActiveCatId(cat.id); setView("bracket"); }} 
-                               className={`flex-1 font-semibold text-xs py-2 rounded-lg border transition-colors ${cat.current_step === 'bracket' ? 'bg-red-600/10 hover:bg-red-600/20 text-red-500 border-red-600/30' : 'bg-gray-900 text-gray-700 border-gray-800 cursor-not-allowed'}`} 
+                               className={`flex-1 font-semibold text-xs py-2.5 rounded-lg border transition-colors text-center ${cat.current_step === 'bracket' ? 'bg-red-600/10 hover:bg-red-600/20 text-red-500 border-red-600/30' : 'bg-gray-900 text-gray-700 border-gray-800 cursor-not-allowed'}`} 
                                disabled={cat.current_step !== 'bracket'}
                             >
                                Ver Resultados
@@ -898,31 +690,31 @@ export default function TournamentApp({ initialCategories }) {
                </div>
 
                {/* Canchas */}
-               <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 shadow-xl flex flex-col h-fit">
-                  <div className="flex justify-between items-center mb-6 border-b border-gray-800 pb-3">
-                    <h3 className="text-lg font-bold text-white">Canchas Habilitadas</h3>
-                    <button className="bg-white text-gray-900 hover:bg-gray-300 font-bold py-1.5 px-3 rounded text-[10px] uppercase tracking-widest transition-colors shadow-lg" onClick={handleAddCourt}>
+               <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 sm:p-6 shadow-xl flex flex-col h-fit">
+                  <div className="flex justify-between items-center mb-5 sm:mb-6 border-b border-gray-800 pb-3">
+                    <h3 className="text-base sm:text-lg font-bold text-white">Canchas Habilitadas</h3>
+                    <button className="bg-white text-gray-900 hover:bg-gray-300 font-bold py-1.5 px-3 rounded-lg text-[10px] uppercase tracking-widest transition-colors shadow-lg" onClick={handleAddCourt}>
                       + Agregar Cancha
                     </button>
                   </div>
-                  <div className="flex flex-col gap-3 mb-4 overflow-y-auto max-h-[350px] custom-scrollbar pr-2">
+                  <div className="flex flex-col gap-2.5 sm:gap-3 mb-4 overflow-y-auto max-h-[350px] custom-scrollbar pr-1">
                     {courts.length === 0 && <p className="text-gray-500 text-sm italic">No hay canchas registradas.</p>}
                     {courts.map(c => (
-                       <div key={c.id} className="flex justify-between items-center bg-gray-950 border border-gray-800 p-4 rounded-xl group hover:border-gray-700 transition-colors">
+                       <div key={c.id} className="flex justify-between items-center bg-gray-950 border border-gray-800 p-3.5 sm:p-4 rounded-xl group hover:border-gray-700 transition-colors">
                           <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-gray-400 border border-gray-700">
+                            <div className="w-8 h-8 rounded-lg bg-gray-800 flex items-center justify-center text-gray-400 border border-gray-700 shrink-0">
                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                             </div>
-                            <span className="text-white font-bold">{c.name}</span>
+                            <span className="text-white font-bold text-sm sm:text-base">{c.name}</span>
                           </div>
-                          <div className="flex gap-2">
+                          <div className="flex gap-2 items-center">
                              <button 
                                onClick={() => { setActiveCourtId(c.id); setView("court_schedule"); }}
-                               className="bg-white/10 text-gray-300 border border-white/20 px-3 py-1.5 rounded text-xs font-bold transition-colors hover:bg-white hover:text-gray-900"
+                               className="bg-white/10 text-gray-300 border border-white/20 px-3.5 py-2 rounded-lg text-xs font-bold transition-colors hover:bg-white hover:text-gray-900"
                              >
                                 Turnos
                              </button>
-                             <button onClick={() => handleDeleteCourt(c.id, c.name)} className="bg-red-900/10 text-red-400 hover:bg-red-900/40 border border-red-900/20 p-1.5 rounded transition-colors" title="Eliminar Cancha">
+                             <button onClick={() => handleDeleteCourt(c.id, c.name)} className="bg-red-900/10 text-red-400 hover:bg-red-900/40 border border-red-900/20 p-2 rounded-lg transition-colors" title="Eliminar Cancha">
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                              </button>
                           </div>
@@ -990,11 +782,15 @@ export default function TournamentApp({ initialCategories }) {
         {view === "bracket" && activeCatId && (
           <BracketView 
             category={categories.find(c => c.id === activeCatId)}
+            categories={categories}
+            onSelectCategory={setActiveCatId}
             allMatches={matches}
             courts={courts}
             mode={mode}
             onBack={() => setView(mode === "admin" ? "admin_home" : "home")}
             onMatchUpdate={handleMatchUpdate}
+            onPlayersUpdate={handlePlayersUpdate}
+            showToast={showToast}
           />
         )}
 
@@ -1039,6 +835,15 @@ export default function TournamentApp({ initialCategories }) {
 
       <Toast message={toastMessage} onClose={() => setToastMessage("")} />
 
+      <AutoPilotModal 
+        isOpen={showAutoPilotModal}
+        onClose={() => setShowAutoPilotModal(false)}
+        categories={categories}
+        players={players}
+        matches={matches}
+        onConfirm={handleAutoPilot}
+      />
+
       {mode === "public" && (
         <div className="md:hidden fixed bottom-0 left-0 right-0 bg-black/95 backdrop-blur-md border-t border-gray-800 flex justify-between px-8 py-3 z-50">
            <button onClick={() => setView("home")} className={`flex flex-col items-center gap-1 transition-colors ${view === "home" ? "text-red-500" : "text-gray-500 hover:text-gray-300"}`}>
@@ -1053,6 +858,46 @@ export default function TournamentApp({ initialCategories }) {
            <button onClick={() => setView("players")} className={`flex flex-col items-center gap-1 transition-colors ${view === "players" ? "text-red-500" : "text-gray-500 hover:text-gray-300"}`}>
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
               <span className="text-[10px] font-bold uppercase tracking-widest">Jugadores</span>
+           </button>
+        </div>
+      )}
+
+      {mode === "admin" && (
+        <div className="md:hidden fixed bottom-0 left-0 right-0 bg-black/95 backdrop-blur-md border-t border-gray-800 flex justify-around px-2 py-2 z-50">
+           <button 
+             onClick={() => setView("admin_home")} 
+             className={`flex flex-col items-center gap-1 transition-colors px-2 py-1 ${view === "admin_home" ? "text-red-500 font-bold" : "text-gray-400 hover:text-white"}`}
+           >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+              <span className="text-[9px] uppercase tracking-wider font-semibold">Panel</span>
+           </button>
+           <button 
+             onClick={() => setView("admin_global_schedule")} 
+             className={`flex flex-col items-center gap-1 transition-colors px-2 py-1 ${view === "admin_global_schedule" ? "text-red-400 font-bold" : "text-gray-400 hover:text-white"}`}
+           >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+              <span className="text-[9px] uppercase tracking-wider font-semibold">Horarios</span>
+           </button>
+           <button 
+             onClick={() => setView("admin_payments")} 
+             className={`flex flex-col items-center gap-1 transition-colors px-2 py-1 ${view === "admin_payments" ? "text-red-500 font-bold" : "text-gray-400 hover:text-white"}`}
+           >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+              <span className="text-[9px] uppercase tracking-wider font-semibold">Pagos</span>
+           </button>
+           <button 
+             onClick={() => setView("admin_players")} 
+             className={`flex flex-col items-center gap-1 transition-colors px-2 py-1 ${view === "admin_players" ? "text-red-500 font-bold" : "text-gray-400 hover:text-white"}`}
+           >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+              <span className="text-[9px] uppercase tracking-wider font-semibold">Jugadores</span>
+           </button>
+           <button 
+             onClick={() => setShowAutoPilotModal(true)} 
+             className="flex flex-col items-center gap-1 transition-colors px-2 py-1 text-pink-400 hover:text-pink-300"
+           >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+              <span className="text-[9px] uppercase tracking-wider font-semibold">Sorteo</span>
            </button>
         </div>
       )}

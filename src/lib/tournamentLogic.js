@@ -28,11 +28,36 @@ export function createEmptyScore() {
 
 export function generateTournamentMatches(categoryId, numPairs, pairsList, isRandom) {
   let pairs = [...pairsList];
+  const numZones = numPairs / 2;
 
   if (isRandom) {
-    for (let i = pairs.length - 1; i > 0; i--) {
+    // 1. Separar parejas reales de los cupos libres (BYEs)
+    const realPairs = pairsList.filter(p => p && p !== 'BYE' && p.trim() !== '');
+    
+    // Barajar aleatoriamente las parejas reales
+    for (let i = realPairs.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [pairs[i], pairs[j]] = [pairs[j], pairs[i]];
+      [realPairs[i], realPairs[j]] = [realPairs[j], realPairs[i]];
+    }
+
+    // 2. Distribuir equitativamente en las zonas para garantizar que cada zona tenga competencia
+    let zoneP1 = Array(numZones).fill('BYE');
+    let zoneP2 = Array(numZones).fill('BYE');
+    
+    let pIdx = 0;
+    // Asignar primer slot de cada zona
+    for (let z = 0; z < numZones && pIdx < realPairs.length; z++) {
+      zoneP1[z] = realPairs[pIdx++];
+    }
+    // Asignar segundo slot de cada zona con las parejas restantes
+    for (let z = 0; z < numZones && pIdx < realPairs.length; z++) {
+      zoneP2[z] = realPairs[pIdx++];
+    }
+
+    // Reconstruir el listado ordenado por zona [Zona A p1, Zona A p2, Zona B p1, Zona B p2...]
+    pairs = [];
+    for (let z = 0; z < numZones; z++) {
+      pairs.push(zoneP1[z], zoneP2[z]);
     }
   }
 
@@ -41,7 +66,6 @@ export function generateTournamentMatches(categoryId, numPairs, pairsList, isRan
   // 1. ZONAS
   let pairIndex = 0;
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  const numZones = numPairs / 2;
 
   for(let i=0; i < numZones; i++) {
     let p1 = pairs[pairIndex++];
@@ -142,8 +166,9 @@ export function advanceWinner(matchesList, updatedMatch) {
     if (!winnerName || !loserName) return [];
 
     // Buscar si hay partidos en el bracket que estén esperando a este ganador o perdedor
+    // FILTRADO ESTRICTO POR CATEGORÍA: Solo avanza a partidos de la misma categoría
     matchesList.forEach(m => {
-      if (m.match_type === 'BRACKET') {
+      if (m.match_type === 'BRACKET' && String(m.category_id) === String(updatedMatch.category_id)) {
         let matchUpdates = {};
         let needsUpdate = false;
 
@@ -174,15 +199,34 @@ export function advanceWinner(matchesList, updatedMatch) {
     const nextMatchIndex = Math.floor(updatedMatch.match_index / 2);
     const isTop = updatedMatch.match_index % 2 === 0;
 
-    const nextMatch = matchesList.find(m => m.category_id === updatedMatch.category_id && m.match_type === 'BRACKET' && m.round_index === nextRoundIndex && m.match_index === nextMatchIndex);
+    // FILTRADO ESTRICTO POR CATEGORÍA: Solo avanza dentro de su propia categoría
+    const nextMatch = matchesList.find(m => 
+      String(m.category_id) === String(updatedMatch.category_id) && 
+      m.match_type === 'BRACKET' && 
+      m.round_index === nextRoundIndex && 
+      m.match_index === nextMatchIndex
+    );
     
     if (!nextMatch) return []; // No hay siguiente partido (ej. Final)
 
+    const effectiveWinner = (updatedMatch.winner && updatedMatch.winner !== 'null') ? updatedMatch.winner : null;
+    const currentSlot = isTop ? nextMatch.p1_name : nextMatch.p2_name;
+
+    // Si no hay ganador y el slot del siguiente partido ya estaba vacío, no propagar
+    if (!effectiveWinner && !currentSlot) {
+      return [];
+    }
+
+    // Si el ganador no cambió, no propagar
+    if (effectiveWinner === currentSlot) {
+      return [];
+    }
+
     let matchUpdates = {};
     if (isTop) {
-      matchUpdates.p1_name = updatedMatch.winner;
+      matchUpdates.p1_name = effectiveWinner;
     } else {
-      matchUpdates.p2_name = updatedMatch.winner;
+      matchUpdates.p2_name = effectiveWinner;
     }
 
     // Auto-BYE
