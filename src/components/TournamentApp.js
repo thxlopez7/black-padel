@@ -457,12 +457,23 @@ export default function TournamentApp({ initialCategories }) {
                   {categories.length === 0 ? (
                     <p className="text-sm text-gray-500 italic col-span-full">No hay categorías disponibles aún.</p>
                   ) : (
-                    categories.map(cat => (
-                      <button key={cat.id} className="w-full text-left bg-gray-950/80 backdrop-blur-sm border border-gray-800 hover:border-red-600 rounded-xl p-5 transition-all shadow-md group" onClick={() => { setActiveCatId(cat.id); setView("bracket"); }}>
-                        <h3 className="text-xl font-title font-bold text-white group-hover:text-red-500 transition-colors uppercase tracking-widest">{cat.name}</h3>
-                        <p className="text-xs text-gray-500 mt-2 font-medium">{cat.current_step === "bracket" ? "Ver Cuadro y Resultados" : "Pendiente de Sorteo"}</p>
-                      </button>
-                    ))
+                    categories.map(cat => {
+                      const catPlayersCount = players.filter(p => String(p.category_id) === String(cat.id)).length;
+                      return (
+                        <button key={cat.id} className="w-full text-left bg-gray-950/80 backdrop-blur-sm border border-gray-800 hover:border-red-600 rounded-xl p-5 transition-all shadow-md group" onClick={() => { setActiveCatId(cat.id); setView("bracket"); }}>
+                          <h3 className="text-xl font-title font-bold text-white group-hover:text-red-500 transition-colors uppercase tracking-widest">{cat.name}</h3>
+                          <div className="flex items-center gap-2 mt-2">
+                            <span className="text-xs text-gray-400 font-medium">
+                              {catPlayersCount} {catPlayersCount === 1 ? 'pareja inscripta' : 'parejas inscriptas'}
+                            </span>
+                            <span className="text-gray-600">•</span>
+                            <span className={`text-xs font-semibold ${cat.current_step === "bracket" ? "text-emerald-400" : "text-gray-500"}`}>
+                              {cat.current_step === "bracket" ? "Cuadro Activo" : "Pendiente de Sorteo"}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })
                   )}
                 </div>
               </div>
@@ -660,20 +671,35 @@ export default function TournamentApp({ initialCategories }) {
                   </div>
                   <div className="flex flex-col gap-3 sm:gap-4 mb-4 overflow-y-auto max-h-[500px] custom-scrollbar pr-1">
                     {categories.length === 0 && <p className="text-gray-500 text-sm italic">No hay categorías. Crea una nueva.</p>}
-                    {categories.map(cat => (
-                       <div key={cat.id} className="flex flex-col bg-gray-950 border border-gray-800 p-4 rounded-xl group hover:border-gray-700 transition-colors">
-                          <div className="flex justify-between items-start mb-3">
-                            <div>
-                              <span className="text-white font-bold text-base sm:text-lg">{cat.name}</span>
-                              <div className="flex items-center gap-2 mt-1">
-                                <span className="text-[10px] font-bold text-red-500 bg-red-950/30 px-2 py-0.5 rounded border border-red-900 uppercase tracking-widest">{cat.num_pairs} Parejas</span>
-                                {cat.current_step === 'bracket' && <span className="text-[10px] font-bold text-gray-300 bg-gray-800/30 px-2 py-0.5 rounded border border-gray-700 uppercase tracking-widest">Cuadro Activo</span>}
+                    {categories.map(cat => {
+                       const catPlayersCount = players.filter(p => String(p.category_id) === String(cat.id)).length;
+                       return (
+                         <div key={cat.id} className="flex flex-col bg-gray-950 border border-gray-800 p-4 rounded-xl group hover:border-gray-700 transition-colors">
+                            <div className="flex justify-between items-start mb-3">
+                              <div>
+                                <span className="text-white font-bold text-base sm:text-lg">{cat.name}</span>
+                                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mt-1">
+                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-widest ${
+                                    catPlayersCount > 0 
+                                      ? 'text-red-400 bg-red-950/40 border-red-900/60' 
+                                      : 'text-gray-400 bg-gray-900 border-gray-800'
+                                  }`}>
+                                    {catPlayersCount} {catPlayersCount === 1 ? 'Pareja Inscripta' : 'Parejas Inscriptas'}
+                                  </span>
+                                  <span className="text-[10px] font-bold text-gray-400 bg-gray-900/80 px-2 py-0.5 rounded border border-gray-800 uppercase tracking-widest">
+                                    Cuadro: {cat.num_pairs || 8}
+                                  </span>
+                                  {cat.current_step === 'bracket' && (
+                                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-900/60 uppercase tracking-widest">
+                                      Cuadro Activo
+                                    </span>
+                                  )}
+                                </div>
                               </div>
+                              <button onClick={() => handleDeleteCategory(cat.id, cat.name)} className="text-gray-500 hover:text-red-400 p-1.5 transition-colors" title="Eliminar Categoría">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                              </button>
                             </div>
-                            <button onClick={() => handleDeleteCategory(cat.id, cat.name)} className="text-gray-500 hover:text-red-400 p-1.5 transition-colors" title="Eliminar Categoría">
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                            </button>
-                          </div>
                           <div className="flex gap-2">
                             <button onClick={() => { setActiveCatId(cat.id); setView("admin_setup"); }} className="flex-1 bg-gray-800 hover:bg-gray-700 text-white font-semibold text-xs py-2.5 rounded-lg border border-gray-700 transition-colors text-center">Gestionar Cuadro</button>
                             <button 
@@ -685,7 +711,8 @@ export default function TournamentApp({ initialCategories }) {
                             </button>
                           </div>
                        </div>
-                    ))}
+                     );
+                    })}
                   </div>
                </div>
 
