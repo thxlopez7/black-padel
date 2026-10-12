@@ -19,7 +19,7 @@ import AdminGlobalScheduleSetup from "./AdminGlobalScheduleSetup";
 function AdminSetup({ category, players, courts, onBack, onGenerate }) {
   const categoryPlayers = players.filter(p => p.category_id === category.id);
   const supportedSizes = [6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32];
-  const requiredSize = supportedSizes.find(s => s >= Math.max(6, categoryPlayers.length)) || 32;
+  const requiredSize = Math.max(14, supportedSizes.find(s => s >= categoryPlayers.length) || 14);
   const initialNum = category.current_step === 'bracket' ? (category.num_pairs || requiredSize) : requiredSize;
 
   const [numPairs, setNumPairs] = useState(initialNum);
@@ -162,13 +162,64 @@ export default function TournamentApp({ initialCategories }) {
       placeholder: "Ej: 7ma Caballeros",
       onConfirm: async (name) => {
         setPromptConfig(null);
-        const newCat = await addCategory(name);
+        showToast(`Creando categoría "${name}" y generando cuadro de 14 parejas...`);
+        const newCat = await addCategory(name, 14);
         if (newCat) {
-          setCategories([...categories, newCat]);
-          showToast("Categoría agregada exitosamente");
+          // Generar inmediatamente la plantilla de 14 parejas en la base de datos
+          const { generatedMatches } = generateTournamentMatches(newCat.id, 14, Array(14).fill(''), false);
+          await saveGeneratedMatches(generatedMatches);
+          await updateCategory(newCat.id, { num_pairs: 14, current_step: 'bracket' });
+          
+          const freshMatches = await getMatches();
+          setMatches(freshMatches);
+          const freshCats = await getCategories();
+          setCategories(freshCats);
+          showToast(`Categoría "${name}" creada con su cuadro de 14 parejas.`);
         }
       }
     });
+  };
+
+  const handleInitCategoryDefaultDraw = async (catId) => {
+    showToast("Guardando cuadro de 14 parejas en la base de datos...");
+    try {
+      const { generatedMatches } = generateTournamentMatches(catId, 14, Array(14).fill(''), false);
+      await deleteMatchesByCategory(catId);
+      await saveGeneratedMatches(generatedMatches);
+      await updateCategory(catId, { num_pairs: 14, current_step: 'bracket' });
+      
+      const freshMatches = await getMatches();
+      setMatches(freshMatches);
+      const freshCats = await getCategories();
+      setCategories(freshCats);
+      showToast("Cuadro de 14 parejas guardado con éxito.");
+    } catch (err) {
+      console.error("Error al inicializar cuadro:", err);
+      showToast("Error al guardar cuadro en la base de datos.");
+    }
+  };
+
+  const handleInitAllCategories14Draws = async () => {
+    showToast("Sincronizando cuadros de 14 parejas para todas las categorías...");
+    try {
+      for (const cat of categories) {
+        const catMatches = matches.filter(m => String(m.category_id) === String(cat.id));
+        if (catMatches.length === 0 || cat.current_step !== 'bracket') {
+          const { generatedMatches } = generateTournamentMatches(cat.id, 14, Array(14).fill(''), false);
+          await deleteMatchesByCategory(cat.id);
+          await saveGeneratedMatches(generatedMatches);
+          await updateCategory(cat.id, { num_pairs: 14, current_step: 'bracket' });
+        }
+      }
+      const freshMatches = await getMatches();
+      setMatches(freshMatches);
+      const freshCats = await getCategories();
+      setCategories(freshCats);
+      showToast("Cuadros de 14 parejas sincronizados en la base de datos con éxito.");
+    } catch (err) {
+      console.error("Error al sincronizar cuadros de 14 parejas:", err);
+      showToast("Error al sincronizar cuadros.");
+    }
   };
 
   const handleAddCourt = () => {
@@ -186,9 +237,9 @@ export default function TournamentApp({ initialCategories }) {
     });
   };
 
-  const handleGenerateTournament = async (numPairs, pairs, isRandom) => {
-    // Rellenamos los vacíos con 'BYE'
-    const finalPairs = pairs.map(p => p.trim() || 'BYE');
+  const handleGenerateTournament = async (numPairs = 14, pairs, isRandom) => {
+    // Si los cupos están vacíos, no forzamos BYE en zonas para permitir que se inscriban en tarjeta
+    const finalPairs = pairs.map(p => (p && p.trim() !== '') ? p.trim() : '');
     const { generatedMatches } = generateTournamentMatches(activeCatId, numPairs, finalPairs, isRandom);
     
     // Actualizamos la categoría
@@ -212,27 +263,28 @@ export default function TournamentApp({ initialCategories }) {
     
     showToast("Sorteo generado con éxito.");
     setView("bracket");
-
   };
 
   const handleGenerateGlobalSchedule = async (config) => {
-    showToast("Calculando y guardando calendario...");
+    showToast("Calculando y guardando calendario en la base de datos...");
     
     const newSchedule = generateGlobalSchedule(matches, categories, config);
+    const scheduledMatches = newSchedule.filter(m => !m.is_bye && m.id);
     
-    const updates = newSchedule
-      .filter(m => !m.is_bye && m.id)
-      .map(m => updateMatch(m.id, {
+    // Guardar en bloques seguros de 20 partidos para máxima fiabilidad
+    const chunkSize = 20;
+    for (let i = 0; i < scheduledMatches.length; i += chunkSize) {
+      const chunk = scheduledMatches.slice(i, i + chunkSize);
+      await Promise.all(chunk.map(m => updateMatch(m.id, {
          match_date: m.match_date,
          match_time: m.match_time,
          court_id: m.court_id
-      }));
+      })));
+    }
       
-    await Promise.all(updates);
-    
     const fetchedMatches = await getMatches();
     setMatches(fetchedMatches);
-    showToast("Calendario global aplicado con éxito.");
+    showToast("Calendario global aplicado con éxito a todos los cuadros.");
     setView("admin_home");
   };
 
@@ -251,6 +303,26 @@ export default function TournamentApp({ initialCategories }) {
       setPlayers(fetchedPlayers);
       const fetchedMatches = await getMatches();
       setMatches(fetchedMatches);
+      const fetchedCategories = await getCategories();
+      setCategories(fetchedCategories);
+
+      // Si el administrador está en sesión activa, inicializar automáticamente cuadros de 14 parejas para las categorías sin partidos
+      if (currentSession && fetchedCategories && fetchedCategories.length > 0) {
+        const emptyCats = fetchedCategories.filter(c => 
+          !fetchedMatches.some(m => String(m.category_id) === String(c.id))
+        );
+        if (emptyCats.length > 0) {
+          for (const c of emptyCats) {
+            const { generatedMatches } = generateTournamentMatches(c.id, 14, Array(14).fill(''), false);
+            await saveGeneratedMatches(generatedMatches);
+            await updateCategory(c.id, { num_pairs: 14, current_step: 'bracket' });
+          }
+          const freshMatches = await getMatches();
+          setMatches(freshMatches);
+          const freshCats = await getCategories();
+          setCategories(freshCats);
+        }
+      }
     };
     loadData();
 
@@ -283,8 +355,8 @@ export default function TournamentApp({ initialCategories }) {
     for (const cat of categories) {
       const catPlayers = players.filter(p => String(p.category_id) === String(cat.id));
       
-      // Tamaño de cuadro dinámico para abarcar a todas las parejas inscriptas sin límite fijo
-      let numPairs = supportedSizes.find(s => s >= Math.max(6, catPlayers.length)) || 32;
+      // Tamaño de cuadro predeterminado para 14 parejas (o superior si hay más de 14 anotados)
+      let numPairs = Math.max(14, supportedSizes.find(s => s >= catPlayers.length) || 14);
 
       const pairs = Array(numPairs).fill('');
       catPlayers.forEach((p, idx) => {
@@ -292,7 +364,8 @@ export default function TournamentApp({ initialCategories }) {
           pairs[idx] = `${p.name}${p.partner ? ' & ' + p.partner : ''}`;
         }
       });
-      const finalPairs = pairs.map(p => p.trim() || 'BYE');
+      // Los cupos vacantes se mantienen abiertos (sin forzar BYE) para permitir inscripción directa en tarjetas
+      const finalPairs = pairs.map(p => (p && p.trim() !== '') ? p.trim() : '');
       
       const { generatedMatches } = generateTournamentMatches(cat.id, numPairs, finalPairs, true);
       
@@ -485,8 +558,8 @@ export default function TournamentApp({ initialCategories }) {
                               {catPlayersCount} {catPlayersCount === 1 ? 'pareja inscripta' : 'parejas inscriptas'}
                             </span>
                             <span className="text-gray-600">•</span>
-                            <span className={`text-xs font-semibold ${cat.current_step === "bracket" ? "text-emerald-400" : "text-gray-500"}`}>
-                              {cat.current_step === "bracket" ? "Cuadro Activo" : "Pendiente de Sorteo"}
+                            <span className="text-xs font-semibold text-emerald-400">
+                              {cat.current_step === "bracket" ? "Cuadro Activo (14 Parejas)" : "Cuadro de 14 Parejas"}
                             </span>
                           </div>
                         </button>
@@ -632,6 +705,16 @@ export default function TournamentApp({ initialCategories }) {
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
                   Gestor de Horarios
                 </button>
+                <button 
+                  onClick={handleInitAllCategories14Draws}
+                  className="flex-shrink-0 whitespace-nowrap bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500 hover:text-white font-semibold py-2.5 px-3.5 sm:px-4 rounded-xl text-xs transition-colors shadow-md flex items-center gap-2"
+                  title="Generar cuadros de 14 parejas predeterminadas para todas las categorías en la base de datos"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                  </svg>
+                  Cuadros 14 Parejas
+                </button>
                 <button onClick={() => setView("admin_payments")} className="flex-shrink-0 whitespace-nowrap bg-red-600/10 text-red-500 border border-red-600/20 hover:bg-red-600 hover:text-gray-900 font-semibold py-2.5 px-3.5 sm:px-4 rounded-xl text-xs transition-colors shadow-md flex items-center gap-2">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                   Inscripciones
@@ -723,10 +806,9 @@ export default function TournamentApp({ initialCategories }) {
                             <button onClick={() => { setActiveCatId(cat.id); setView("admin_setup"); }} className="flex-1 bg-gray-800 hover:bg-gray-700 text-white font-semibold text-xs py-2.5 rounded-lg border border-gray-700 transition-colors text-center">Gestionar Cuadro</button>
                             <button 
                                onClick={() => { setActiveCatId(cat.id); setView("bracket"); }} 
-                               className={`flex-1 font-semibold text-xs py-2.5 rounded-lg border transition-colors text-center ${cat.current_step === 'bracket' ? 'bg-red-600/10 hover:bg-red-600/20 text-red-500 border-red-600/30' : 'bg-gray-900 text-gray-700 border-gray-800 cursor-not-allowed'}`} 
-                               disabled={cat.current_step !== 'bracket'}
+                               className="flex-1 font-semibold text-xs py-2.5 rounded-lg border transition-colors text-center bg-red-600/10 hover:bg-red-600/20 text-red-500 border-red-600/30"
                             >
-                               Ver Resultados
+                               Ver Cuadro
                             </button>
                           </div>
                        </div>
@@ -831,12 +913,15 @@ export default function TournamentApp({ initialCategories }) {
             categories={categories}
             onSelectCategory={setActiveCatId}
             allMatches={matches}
+            players={players}
             courts={courts}
             mode={mode}
             onBack={() => setView(mode === "admin" ? "admin_home" : "home")}
             onMatchUpdate={handleMatchUpdate}
             onPlayersUpdate={handlePlayersUpdate}
             showToast={showToast}
+            onOpenSchedule={() => setView("admin_global_schedule")}
+            onInitDefaultDraw={handleInitCategoryDefaultDraw}
           />
         )}
 

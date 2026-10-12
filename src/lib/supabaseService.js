@@ -44,10 +44,14 @@ export async function getCategories() {
   return data || [];
 }
 
-export async function addCategory(name, numPairs = 6) {
+export async function addCategory(name, numPairs = 14) {
   const cleanName = sanitizeString(name, 60);
-  const cleanNumPairs = Math.max(4, Math.min(64, Number(numPairs) || 6));
-  const { data, error } = await supabase.from('categories').insert([{ name: cleanName, num_pairs: cleanNumPairs }]).select();
+  const cleanNumPairs = Math.max(4, Math.min(64, Number(numPairs) || 14));
+  const { data, error } = await supabase.from('categories').insert([{ 
+    name: cleanName, 
+    num_pairs: cleanNumPairs,
+    current_step: 'bracket'
+  }]).select();
   if (error) console.error("Error adding category:", error);
   return data ? data[0] : null;
 }
@@ -90,21 +94,24 @@ export async function getPlayers() {
 
 export async function addPlayer(playerData) {
   const cleanData = {
-    ...playerData,
     name: sanitizeString(playerData?.name, 80),
     partner: playerData?.partner ? sanitizeString(playerData.partner, 80) : null,
-    phone: playerData?.phone ? sanitizeString(playerData.phone, 30) : null,
+    category_id: playerData?.category_id || null,
   };
+  if (playerData?.has_paid !== undefined) {
+    cleanData.has_paid = Boolean(playerData.has_paid);
+  }
   const { data, error } = await supabase.from('players').insert([cleanData]).select();
   if (error) console.error("Error adding player:", error);
   return data ? data[0] : null;
 }
 
 export async function updatePlayer(id, playerData) {
-  const cleanData = { ...playerData };
-  if (cleanData.name !== undefined) cleanData.name = sanitizeString(cleanData.name, 80);
-  if (cleanData.partner !== undefined) cleanData.partner = cleanData.partner ? sanitizeString(cleanData.partner, 80) : null;
-  if (cleanData.phone !== undefined) cleanData.phone = cleanData.phone ? sanitizeString(cleanData.phone, 30) : null;
+  const cleanData = {};
+  if (playerData?.name !== undefined) cleanData.name = sanitizeString(playerData.name, 80);
+  if (playerData?.partner !== undefined) cleanData.partner = playerData.partner ? sanitizeString(playerData.partner, 80) : null;
+  if (playerData?.category_id !== undefined) cleanData.category_id = playerData.category_id || null;
+  if (playerData?.has_paid !== undefined) cleanData.has_paid = Boolean(playerData.has_paid);
   
   const { data, error } = await supabase.from('players').update(cleanData).eq('id', id).select();
   if (error) console.error("Error updating player:", error);
@@ -176,6 +183,20 @@ export async function updateMatch(id, updates) {
   const { data, error } = await supabase.from('matches').update(cleanUpdates).eq('id', id).select();
   if (error) console.error("Error updating match:", error);
   return data ? data[0] : null;
+}
+
+export async function updateMatchesBatch(matchesUpdates) {
+  if (!Array.isArray(matchesUpdates) || matchesUpdates.length === 0) return [];
+  const chunkSize = 20;
+  let allUpdated = [];
+  for (let i = 0; i < matchesUpdates.length; i += chunkSize) {
+    const chunk = matchesUpdates.slice(i, i + chunkSize);
+    const chunkResults = await Promise.all(
+      chunk.map(item => updateMatch(item.id, item.updates))
+    );
+    allUpdated.push(...chunkResults.filter(Boolean));
+  }
+  return allUpdated;
 }
 
 export async function updatePlayerPayment(playerId, hasPaid) {

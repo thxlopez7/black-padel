@@ -28,13 +28,17 @@ export function createEmptyScore() {
   return { p1: ['','',''], p2: ['','',''] };
 }
 
-export function generateTournamentMatches(categoryId, numPairs, pairsList, isRandom) {
-  let pairs = [...pairsList];
-  const numZones = numPairs / 2;
+export function generateTournamentMatches(categoryId, numPairs = 14, pairsList = [], isRandom = false) {
+  const safeNumPairs = Number(numPairs) || 14;
+  let pairs = Array.isArray(pairsList) ? [...pairsList] : [];
+  while (pairs.length < safeNumPairs) {
+    pairs.push('');
+  }
+  const numZones = safeNumPairs / 2;
 
   if (isRandom) {
-    // 1. Separar parejas reales de los cupos libres (BYEs)
-    const realPairs = pairsList.filter(p => p && p !== 'BYE' && p.trim() !== '');
+    // 1. Separar parejas reales de los cupos libres
+    const realPairs = pairs.filter(p => p && p !== 'BYE' && String(p).trim() !== '');
     
     // Barajar aleatoriamente las parejas reales
     for (let i = realPairs.length - 1; i > 0; i--) {
@@ -42,9 +46,9 @@ export function generateTournamentMatches(categoryId, numPairs, pairsList, isRan
       [realPairs[i], realPairs[j]] = [realPairs[j], realPairs[i]];
     }
 
-    // 2. Distribuir equitativamente en las zonas para garantizar que cada zona tenga competencia
-    let zoneP1 = Array(numZones).fill('BYE');
-    let zoneP2 = Array(numZones).fill('BYE');
+    // 2. Distribuir equitativamente en las zonas manteniendo los cupos vacantes como null
+    let zoneP1 = Array(numZones).fill(null);
+    let zoneP2 = Array(numZones).fill(null);
     
     let pIdx = 0;
     // Asignar primer slot de cada zona
@@ -70,31 +74,53 @@ export function generateTournamentMatches(categoryId, numPairs, pairsList, isRan
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
   for(let i=0; i < numZones; i++) {
-    let p1 = pairs[pairIndex++];
-    let p2 = pairs[pairIndex++];
+    const rawP1 = pairs[pairIndex++];
+    const rawP2 = pairs[pairIndex++];
+
+    const cleanSlot = (val) => {
+      if (!val || String(val).trim() === '') return null;
+      if (String(val).trim().toUpperCase() === 'BYE') return 'BYE';
+      return String(val).trim();
+    };
+
+    const p1 = cleanSlot(rawP1);
+    const p2 = cleanSlot(rawP2);
+
     let autoWinner = null;
     let isComplete = false;
+    let isBye = false;
     
-    if (p1 === 'BYE' && p2 !== 'BYE') { autoWinner = p2; isComplete = true; }
-    else if (p2 === 'BYE' && p1 !== 'BYE') { autoWinner = p1; isComplete = true; }
-    else if (p1 === 'BYE' && p2 === 'BYE') { autoWinner = 'BYE'; isComplete = true; }
+    // Solo se autodefine por BYE si explícitamente se configuró como 'BYE'
+    if (p1 === 'BYE' && p2 && p2 !== 'BYE') { 
+      autoWinner = p2; 
+      isComplete = true; 
+      isBye = true;
+    } else if (p2 === 'BYE' && p1 && p1 !== 'BYE') { 
+      autoWinner = p1; 
+      isComplete = true; 
+      isBye = true;
+    } else if (p1 === 'BYE' && p2 === 'BYE') { 
+      autoWinner = 'BYE'; 
+      isComplete = true; 
+      isBye = true;
+    }
 
     generatedMatches.push({
       category_id: categoryId,
       match_type: 'ZONE',
-      round_name: 'ZONA ' + alphabet[i],
+      round_name: 'ZONA ' + (alphabet[i] || `${i + 1}`),
       round_index: 0,
       match_index: i,
       p1_name: p1,
       p2_name: p2,
       winner: autoWinner,
       is_wo: isComplete,
-      is_bye: p1 === 'BYE' || p2 === 'BYE'
+      is_bye: isBye
     });
   }
 
   // 2. BRACKET (First Round)
-  let mapTemplate = BRACKET_MAPS[numPairs];
+  let mapTemplate = BRACKET_MAPS[safeNumPairs] || BRACKET_MAPS[14];
   let numRounds = Math.log2(mapTemplate.length);
   let rNames = getRoundNames(numRounds);
   
@@ -149,6 +175,10 @@ export function generateTournamentMatches(categoryId, numPairs, pairsList, isRan
   }
 
   return { pairs, generatedMatches };
+}
+
+export function createDefault14TournamentMatches(categoryId) {
+  return generateTournamentMatches(categoryId, 14, Array(14).fill(''), false).generatedMatches;
 }
 
 export function determineWinnerFromScores(p1Name, p2Name, p1Score, p2Score) {
