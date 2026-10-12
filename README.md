@@ -1,6 +1,6 @@
-# Circuito Black Pádel - Sistema de Gestión y Fixture
+# R.D Eventos - Sistema de Gestión y Fixture
 
-Sistema de software diseñado y desarrollado exclusivamente para la administración, visualización y automatización de torneos del **Circuito Black Pádel**. Este sistema proporciona una plataforma robusta para la gestión de categorías, jugadores, canchas y cruces de partidos, optimizando el tiempo y reduciendo el margen de error en la organización deportiva.
+Sistema de software diseñado y desarrollado exclusivamente para la administración, visualización y automatización de torneos de **R.D Eventos**. Este sistema proporciona una plataforma robusta para la gestión de categorías, jugadores, canchas y cruces de partidos, optimizando el tiempo y reduciendo el margen de error en la organización deportiva.
 
 ## Características Principales
 
@@ -23,18 +23,18 @@ Sistema de software diseñado y desarrollado exclusivamente para la administraci
 4. **Interfaz Pública Optimizada (Mobile First)**
    - Diseño responsivo adaptado para la consulta en tiempo real desde dispositivos móviles.
    - Visualización clara y concisa de resultados, horarios y próximos enfrentamientos por cancha.
-   - Identidad visual sobria e institucional, reflejando el branding de Black Pádel.
+   - Identidad visual sobria e institucional de R.D Eventos.
 
 ## Requisitos del Sistema
 
 - **Entorno de Ejecución:** Node.js (v18.x o superior)
 - **Framework Principal:** Next.js (React)
-- **Base de Datos y Autenticación:** Supabase (PostgreSQL)
+- **Base de Datos y Autenticación:** Supabase (PostgreSQL & Supabase Auth)
 - **Estilos:** Tailwind CSS
 
 ## Instrucciones de Despliegue en Vercel
 
-El proyecto está configurado para ser desplegado en la plataforma Vercel de manera directa y optimizada. Siga los pasos detallados a continuación para llevar el sistema a un entorno de producción:
+El proyecto está configurado para ser desplegado en la plataforma Vercel de manera directa y optimizada:
 
 1. **Sincronización con GitHub:**
    Asegúrese de que el código fuente esté actualizado en el repositorio principal:
@@ -42,26 +42,20 @@ El proyecto está configurado para ser desplegado en la plataforma Vercel de man
 
 2. **Configuración en Vercel:**
    - Inicie sesión en [Vercel](https://vercel.com).
-   - Seleccione la opción "Add New Project" y conecte su cuenta de GitHub.
-   - Importe el repositorio `black-padel`.
+   - Importe el repositorio y asigne el dominio personalizado `https://www.rdeventos.online`.
 
 3. **Variables de Entorno (Crucial):**
-   Durante la configuración del proyecto en Vercel, debe agregar las siguientes variables de entorno en la sección "Environment Variables". Los valores deben coincidir exactamente con los provistos por su proyecto de Supabase:
+   Durante la configuración del proyecto en Vercel, debe agregar las siguientes variables de entorno:
    - `NEXT_PUBLIC_SUPABASE_URL` = [URL de su instancia Supabase]
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY` = [Clave anónima pública de Supabase]
-   - `ADMIN_PASSWORD` = [Contraseña segura para el panel de administración]
 
 4. **Despliegue (Deploy):**
-   - No es necesario modificar los "Build & Development Settings" ya que Vercel detectará automáticamente que es un proyecto Next.js.
-   - Haga clic en el botón "Deploy". Vercel compilará la aplicación y la publicará en una URL segura.
-
-5. **Actualizaciones Posteriores:**
-   Cualquier cambio empujado (push) a la rama `main` en GitHub desencadenará un redespliegue automático en Vercel, manteniendo el sistema actualizado sin intervención manual.
+   Cualquier cambio empujado (push) a la rama `main` en GitHub desencadenará un redespliegue automático en Vercel.
 
 ## Consideraciones de Seguridad y Administración
 
-- **Panel de Administración:** El acceso al sistema de gestión está protegido mediante autenticación. Se recomienda utilizar contraseñas alfanuméricas complejas en la variable `ADMIN_PASSWORD`.
-- **Integridad de Datos:** Cualquier eliminación de categorías o uso del "Piloto Automático" resulta en la purga irreversible de datos de cuadros vigentes. Se recomienda utilizar estas funciones únicamente en las fases de planificación inicial del torneo.
+- **Panel de Administración:** El acceso al sistema de gestión está protegido mediante Supabase Auth con Row-Level Security (RLS) en la base de datos. Los administradores se gestionan desde el panel de Supabase (Authentication -> Users).
+- **Integridad de Datos:** Las modificaciones de resultados se propagan automáticamente por el cuadro del torneo en tiempo real.
 
 ---
-*Diseñado y desarrollado para Black Pádel.*
+*Diseñado y desarrollado para R.D Eventos.*
