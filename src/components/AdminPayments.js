@@ -106,7 +106,7 @@ export default function AdminPayments({ players, categories, onBack, onPlayersUp
                     
                     <div className="flex items-center justify-between sm:justify-end w-full sm:w-auto gap-3 pt-2 sm:pt-0 border-t border-gray-900 sm:border-0">
                       <span className={`shrink-0 text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-lg border ${p.has_paid ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/60' : 'bg-gray-900 text-gray-400 border-gray-800'}`}>
-                        {p.has_paid ? '✓ Abonado' : 'Pendiente'}
+                        {p.has_paid ? 'Abonado' : 'Pendiente'}
                       </span>
                       <button 
                         onClick={() => handleTogglePayment(p)}

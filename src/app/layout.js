@@ -14,8 +14,8 @@ const oswald = Oswald({
 });
 
 export const metadata = {
-  title: "Circuito Black Pádel",
-  description: "Sistema de gestión y fixture del Circuito Black Pádel",
+  title: "Circuito R.D Eventos",
+  description: "Sistema de gestión y fixture de R.D Eventos",
 };
 
 export default function RootLayout({ children }) {

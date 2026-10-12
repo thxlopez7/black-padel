@@ -204,6 +204,12 @@ export default function TournamentApp({ initialCategories }) {
     const fetchedMatches = await getMatches();
     setMatches(fetchedMatches);
     
+    // Auto-propagar a la base de datos las zonas que ya nacieron resueltas por BYE
+    const resolvedZones = fetchedMatches.filter(m => String(m.category_id) === String(activeCatId) && m.match_type === 'ZONE' && m.winner);
+    for (const rz of resolvedZones) {
+      await handleMatchUpdate(rz);
+    }
+    
     showToast("Sorteo generado con éxito.");
     setView("bracket");
 
@@ -300,6 +306,12 @@ export default function TournamentApp({ initialCategories }) {
     const fetchedCat = await getCategories();
     setCategories(fetchedCat);
     
+    // Auto-propagar a la base de datos las zonas que ya nacieron resueltas por BYE
+    const resolvedZones = fetchedMatches.filter(m => m.match_type === 'ZONE' && m.winner);
+    for (const rz of resolvedZones) {
+      await handleMatchUpdate(rz);
+    }
+    
     showToast("Piloto Automático finalizado. Cruces generados con éxito.");
   };
 
@@ -321,8 +333,8 @@ export default function TournamentApp({ initialCategories }) {
           if (advancedMatch) {
              currentMatches = currentMatches.map(m => m.id === advancedMatch.id ? advancedMatch : m);
              
-             // Si el partido avanzado ganó automáticamente (porque el rival era BYE), lo encolamos para que siga propagando
-             if (prop.updates.winner) {
+             // Si el partido avanzado cambió de ganador (auto-BYE o reset a null), lo encolamos para que siga propagando
+             if (prop.updates.winner !== undefined) {
                queue.push(advancedMatch);
              }
           }
@@ -377,7 +389,7 @@ export default function TournamentApp({ initialCategories }) {
             onClick={() => { setMode("public"); setView("home"); }}
           >
             <div className="flex items-center">
-              <img src="/logo.png" alt="Black Club" className="h-8 sm:h-11 w-auto object-contain" />
+              <img src="/RD.jpeg" alt="R.D Eventos" className="h-9 sm:h-12 w-auto object-contain rounded-md" />
             </div>
           </div>
           
@@ -455,7 +467,7 @@ export default function TournamentApp({ initialCategories }) {
             {/* Columna Izquierda */}
             <div className="lg:col-span-8 flex flex-col gap-6">
               <div className="rounded-2xl overflow-hidden shadow-2xl border border-gray-800 bg-gray-950/80 backdrop-blur-sm flex justify-center">
-                <img src="/flyer.png" alt="Flyer Black Padel" className="w-full max-w-2xl h-auto object-contain" onError={(e) => { e.target.src = "https://placehold.co/800x400/0a192f/bfff00?text=BLACK+PADEL+FLYER"; }} />
+                <img src="/flyer.png" alt="Flyer R.D Eventos" className="w-full max-w-2xl h-auto object-contain" onError={(e) => { e.target.src = "https://placehold.co/800x400/0a192f/bfff00?text=RD+EVENTOS"; }} />
               </div>
               <div className="bg-gray-900/80 backdrop-blur-md border border-gray-800 rounded-2xl p-6 shadow-xl">
                 <h2 className="text-2xl font-title text-white mb-6 border-b border-gray-800 pb-3 uppercase tracking-wider">Selecciona tu <span className="font-bold text-red-500">Categoría</span></h2>
@@ -613,7 +625,7 @@ export default function TournamentApp({ initialCategories }) {
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 border-b border-gray-800 pb-4 gap-4">
               <div>
                 <h2 className="text-2xl sm:text-4xl font-title text-white uppercase tracking-widest">Panel de <span className="font-bold text-red-500">Administración</span></h2>
-                <p className="text-[10px] sm:text-xs text-gray-400 mt-1 uppercase tracking-widest font-bold">Dashboard General - Circuito Black Pádel</p>
+                <p className="text-[10px] sm:text-xs text-gray-400 mt-1 uppercase tracking-widest font-bold">Dashboard General - R.D Eventos</p>
               </div>
               <div className="flex gap-2 overflow-x-auto w-full md:w-auto pb-2 md:pb-0 no-scrollbar touch-pan-x items-center">
                 <button onClick={() => setView("admin_global_schedule")} className="flex-shrink-0 whitespace-nowrap bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500 hover:text-white font-semibold py-2.5 px-3.5 sm:px-4 rounded-xl text-xs transition-colors shadow-md flex items-center gap-2">
@@ -837,10 +849,9 @@ export default function TournamentApp({ initialCategories }) {
           />
         )}
 
-        {mode === "public" && (
-          <footer className="mt-16 pt-8 border-t border-gray-800/50 flex flex-col items-center justify-center text-center gap-4">
-            <div className="text-gray-500 text-xs font-medium tracking-wide">
-              Diseñado y desarrollado para <span className="font-bold text-white">Black Pádel</span>
+          <footer className="mt-16 pt-8 pb-16 md:pb-6 border-t border-gray-800/50 flex flex-col items-center justify-center text-center gap-4">
+            <div className="text-gray-400 text-xs font-medium tracking-wide">
+              Diseñado y desarrollado para <span className="font-bold text-white">R.D Eventos</span>
             </div>
             <div className="flex items-center gap-4">
               <a href="https://www.instagram.com/heythia_/" target="_blank" rel="noreferrer" className="text-gray-400 hover:text-red-500 transition-colors" title="Instagram">
@@ -850,11 +861,10 @@ export default function TournamentApp({ initialCategories }) {
                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path fillRule="evenodd" d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" clipRule="evenodd"></path></svg>
               </a>
             </div>
-            <div className="text-[10px] text-gray-600 font-bold tracking-widest uppercase">
-              Circuito Black Pádel v2.0
+            <div className="text-[10px] text-gray-500 font-bold tracking-widest uppercase">
+              R.D Eventos
             </div>
           </footer>
-        )}
 
       </main>
 
@@ -885,8 +895,8 @@ export default function TournamentApp({ initialCategories }) {
               <span className="text-[10px] font-bold uppercase tracking-widest">Torneo</span>
            </button>
            <button onClick={() => setView("home")} className="flex flex-col items-center justify-center transform -translate-y-2">
-              <div className="w-12 h-12 bg-gray-900 rounded-full flex items-center justify-center border-2 border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.3)]">
-                <img src="/logo.png" alt="Black Club" className="h-6 w-auto" />
+              <div className="w-12 h-12 bg-gray-900 rounded-full flex items-center justify-center border-2 border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.3)] overflow-hidden">
+                <img src="/RD.jpeg" alt="R.D Eventos" className="h-8 w-auto object-contain" />
               </div>
            </button>
            <button onClick={() => setView("players")} className={`flex flex-col items-center gap-1 transition-colors ${view === "players" ? "text-red-500" : "text-gray-500 hover:text-gray-300"}`}>

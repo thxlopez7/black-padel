@@ -1,4 +1,5 @@
 export const BRACKET_MAPS = {
+  4: [ 'WA', 'LB', 'WB', 'LA' ],
   6: [ 'WA', 'BYE', 'WC', 'LB', 'WB', 'BYE', 'LC', 'LA' ],
   8: [ 'WA', 'LB', 'WC', 'LD', 'WB', 'LC', 'WD', 'LA' ],
   10: [ 'WA', 'BYE', 'WE', 'BYE', 'WC', 'BYE', 'LD', 'LB', 'WB', 'BYE', 'LE', 'LC', 'WD', 'BYE', 'LA', 'BYE' ],
@@ -16,6 +17,7 @@ export const BRACKET_MAPS = {
 };
 
 export function getRoundNames(numRounds) {
+  if (numRounds === 2) return ['Semis', 'Final'];
   if (numRounds === 3) return ['Cuartos', 'Semis', 'Final']; 
   if (numRounds === 4) return ['Octavos', 'Cuartos', 'Semis', 'Final']; 
   if (numRounds === 5) return ['16avos', 'Octavos', 'Cuartos', 'Semis', 'Final']; 
@@ -149,57 +151,180 @@ export function generateTournamentMatches(categoryId, numPairs, pairsList, isRan
   return { pairs, generatedMatches };
 }
 
+export function determineWinnerFromScores(p1Name, p2Name, p1Score, p2Score) {
+  if (!p1Name || !p2Name) return null;
+  if (!Array.isArray(p1Score) || !Array.isArray(p2Score)) return null;
+
+  let p1SetsWon = 0;
+  let p2SetsWon = 0;
+  let setsPlayed = 0;
+
+  for (let i = 0; i < 3; i++) {
+    const raw1 = p1Score[i];
+    const raw2 = p2Score[i];
+
+    if (raw1 !== undefined && raw1 !== null && String(raw1).trim() !== '' &&
+        raw2 !== undefined && raw2 !== null && String(raw2).trim() !== '') {
+      const n1 = parseInt(String(raw1).trim(), 10);
+      const n2 = parseInt(String(raw2).trim(), 10);
+
+      if (!isNaN(n1) && !isNaN(n2)) {
+        setsPlayed++;
+        if (n1 > n2) p1SetsWon++;
+        else if (n2 > n1) p2SetsWon++;
+      }
+    }
+  }
+
+  if (setsPlayed === 0) return null;
+
+  // Formato estándar al mejor de 3 sets (quien llega a 2 sets gana)
+  if (p1SetsWon >= 2) return p1Name;
+  if (p2SetsWon >= 2) return p2Name;
+
+  // Formato de 1 set (si solo se cargó 1 set y hay diferencia)
+  if (setsPlayed === 1) {
+    if (p1SetsWon > p2SetsWon) return p1Name;
+    if (p2SetsWon > p1SetsWon) return p2Name;
+  }
+
+  // Si se jugaron 2 o 3 sets y uno tiene más sets ganados que el otro
+  if (setsPlayed >= 2 && p1SetsWon !== p2SetsWon) {
+    return p1SetsWon > p2SetsWon ? p1Name : p2Name;
+  }
+
+  return null;
+}
+
 export function advanceWinner(matchesList, updatedMatch) {
+  if (!updatedMatch || !matchesList) return [];
   let updatesArray = [];
 
-  // SI SE ACTUALIZÓ UNA ZONA
+  // Determinar ganador efectivo: por winner explícito, o calculado por puntajes
+  let winnerName = (updatedMatch.winner && updatedMatch.winner !== 'null') ? updatedMatch.winner : null;
+  if (!winnerName && updatedMatch.p1_name && updatedMatch.p2_name && !updatedMatch.is_wo) {
+    winnerName = determineWinnerFromScores(
+      updatedMatch.p1_name,
+      updatedMatch.p2_name,
+      updatedMatch.p1_score,
+      updatedMatch.p2_score
+    );
+  }
+
+  // 1. SI SE ACTUALIZÓ UNA ZONA
   if (updatedMatch.match_type === 'ZONE') {
-    // Para una zona (ej. "ZONA A"), extraemos la letra "A"
-    const zoneLetter = updatedMatch.round_name.replace('ZONA ', '').trim();
+    const zoneLetter = (updatedMatch.round_name || '').replace(/ZONA\s*/i, '').trim().toUpperCase();
+    if (!zoneLetter) return [];
+
+    const winnerCode = `W${zoneLetter}`;
+    const loserCode = `L${zoneLetter}`;
     const winnerLabel = `Zona ${zoneLetter} 1º`;
     const loserLabel = `Zona ${zoneLetter} 2º`;
 
-    const winnerName = updatedMatch.winner;
-    const loserName = updatedMatch.winner === updatedMatch.p1_name ? updatedMatch.p2_name : 
-                      updatedMatch.winner === updatedMatch.p2_name ? updatedMatch.p1_name : null;
+    let loserName = null;
+    if (winnerName) {
+      if (winnerName === updatedMatch.p1_name) loserName = updatedMatch.p2_name;
+      else if (winnerName === updatedMatch.p2_name) loserName = updatedMatch.p1_name;
+    }
 
-    if (!winnerName || !loserName) return [];
+    // Obtener todos los partidos de zona de esta categoría para calcular número de parejas
+    const categoryZoneMatches = matchesList.filter(m => 
+      m.match_type === 'ZONE' && String(m.category_id) === String(updatedMatch.category_id)
+    );
+    const numPairs = categoryZoneMatches.length * 2;
+    const mapTemplate = BRACKET_MAPS[numPairs] || [];
 
-    // Buscar si hay partidos en el bracket que estén esperando a este ganador o perdedor
-    // FILTRADO ESTRICTO POR CATEGORÍA: Solo avanza a partidos de la misma categoría
-    matchesList.forEach(m => {
-      if (m.match_type === 'BRACKET' && String(m.category_id) === String(updatedMatch.category_id)) {
-        let matchUpdates = {};
-        let needsUpdate = false;
+    // Partidos de Ronda 1 del Bracket de la misma categoría
+    const round1Matches = matchesList.filter(m => 
+      m.match_type === 'BRACKET' && 
+      m.round_index === 1 && 
+      String(m.category_id) === String(updatedMatch.category_id)
+    );
 
-        // Reemplazar Winner
-        if (m.p1_name === winnerLabel) { matchUpdates.p1_name = winnerName; needsUpdate = true; }
-        if (m.p2_name === winnerLabel) { matchUpdates.p2_name = winnerName; needsUpdate = true; }
-        
-        // Reemplazar Loser
-        if (m.p1_name === loserLabel) { matchUpdates.p1_name = loserName; needsUpdate = true; }
-        if (m.p2_name === loserLabel) { matchUpdates.p2_name = loserName; needsUpdate = true; }
+    round1Matches.forEach(m => {
+      let matchUpdates = {};
+      let needsUpdate = false;
 
-        if (needsUpdate) {
-          // Chequeo de Auto-BYE
-          if (matchUpdates.p1_name && m.p2_name === 'BYE') matchUpdates.winner = matchUpdates.p1_name;
-          if (matchUpdates.p2_name && m.p1_name === 'BYE') matchUpdates.winner = matchUpdates.p2_name;
-          
-          updatesArray.push({ matchId: m.id, updates: matchUpdates });
+      // Código de slot según la plantilla del torneo
+      const code1 = mapTemplate[2 * m.match_index];
+      const code2 = mapTemplate[2 * m.match_index + 1];
+
+      // Verificar Slot 1 (p1)
+      const isSlot1Winner = (code1 && code1 === winnerCode) || m.p1_name === winnerLabel;
+      const isSlot1Loser = (code1 && code1 === loserCode) || m.p1_name === loserLabel;
+
+      if (isSlot1Winner) {
+        const targetValue = winnerName || winnerLabel;
+        if (m.p1_name !== targetValue) {
+          matchUpdates.p1_name = targetValue;
+          needsUpdate = true;
         }
+      } else if (isSlot1Loser) {
+        const targetValue = loserName || loserLabel;
+        if (m.p1_name !== targetValue) {
+          matchUpdates.p1_name = targetValue;
+          needsUpdate = true;
+        }
+      }
+
+      // Verificar Slot 2 (p2)
+      const isSlot2Winner = (code2 && code2 === winnerCode) || m.p2_name === winnerLabel;
+      const isSlot2Loser = (code2 && code2 === loserCode) || m.p2_name === loserLabel;
+
+      if (isSlot2Winner) {
+        const targetValue = winnerName || winnerLabel;
+        if (m.p2_name !== targetValue) {
+          matchUpdates.p2_name = targetValue;
+          needsUpdate = true;
+        }
+      } else if (isSlot2Loser) {
+        const targetValue = loserName || loserLabel;
+        if (m.p2_name !== targetValue) {
+          matchUpdates.p2_name = targetValue;
+          needsUpdate = true;
+        }
+      }
+
+      if (needsUpdate) {
+        const newP1 = matchUpdates.p1_name !== undefined ? matchUpdates.p1_name : m.p1_name;
+        const newP2 = matchUpdates.p2_name !== undefined ? matchUpdates.p2_name : m.p2_name;
+
+        const isP1Real = newP1 && newP1 !== 'BYE' && !newP1.startsWith('Zona ');
+        const isP2Real = newP2 && newP2 !== 'BYE' && !newP2.startsWith('Zona ');
+
+        // Auto-BYE: si un clasificado real enfrenta a un BYE, avanza automáticamente
+        if (isP1Real && newP2 === 'BYE') {
+          matchUpdates.winner = newP1;
+          matchUpdates.is_wo = true;
+          matchUpdates.is_bye = true;
+        } else if (isP2Real && newP1 === 'BYE') {
+          matchUpdates.winner = newP2;
+          matchUpdates.is_wo = true;
+          matchUpdates.is_bye = true;
+        } else {
+          // Si el partido tenía un resultado previo y uno de los clasificados cambió o se borró el ganador de la zona:
+          if (m.winner || (m.p1_score && m.p1_score.some(s => s))) {
+            matchUpdates.winner = null;
+            matchUpdates.is_wo = false;
+            matchUpdates.p1_score = ['', '', ''];
+            matchUpdates.p2_score = ['', '', ''];
+          }
+        }
+
+        updatesArray.push({ matchId: m.id, updates: matchUpdates });
       }
     });
 
     return updatesArray;
   }
 
-  // SI SE ACTUALIZÓ EL BRACKET
+  // 2. SI SE ACTUALIZÓ UN PARTIDO DEL BRACKET
   if (updatedMatch.match_type === 'BRACKET') {
     const nextRoundIndex = updatedMatch.round_index + 1;
     const nextMatchIndex = Math.floor(updatedMatch.match_index / 2);
     const isTop = updatedMatch.match_index % 2 === 0;
 
-    // FILTRADO ESTRICTO POR CATEGORÍA: Solo avanza dentro de su propia categoría
+    // Buscar el siguiente partido en la llave dentro de la misma categoría
     const nextMatch = matchesList.find(m => 
       String(m.category_id) === String(updatedMatch.category_id) && 
       m.match_type === 'BRACKET' && 
@@ -207,33 +332,49 @@ export function advanceWinner(matchesList, updatedMatch) {
       m.match_index === nextMatchIndex
     );
     
-    if (!nextMatch) return []; // No hay siguiente partido (ej. Final)
+    if (!nextMatch) return []; // Llegó a la Final
 
-    const effectiveWinner = (updatedMatch.winner && updatedMatch.winner !== 'null') ? updatedMatch.winner : null;
     const currentSlot = isTop ? nextMatch.p1_name : nextMatch.p2_name;
 
-    // Si no hay ganador y el slot del siguiente partido ya estaba vacío, no propagar
-    if (!effectiveWinner && !currentSlot) {
-      return [];
-    }
-
     // Si el ganador no cambió, no propagar
-    if (effectiveWinner === currentSlot) {
+    if (winnerName === currentSlot && !(currentSlot && !winnerName)) {
       return [];
     }
 
     let matchUpdates = {};
     if (isTop) {
-      matchUpdates.p1_name = effectiveWinner;
+      matchUpdates.p1_name = winnerName;
     } else {
-      matchUpdates.p2_name = effectiveWinner;
+      matchUpdates.p2_name = winnerName;
     }
 
-    // Auto-BYE
-    if (matchUpdates.p1_name && nextMatch.p2_name === 'BYE') matchUpdates.winner = matchUpdates.p1_name;
-    if (matchUpdates.p2_name && nextMatch.p1_name === 'BYE') matchUpdates.winner = matchUpdates.p2_name;
+    const finalP1 = isTop ? winnerName : nextMatch.p1_name;
+    const finalP2 = isTop ? nextMatch.p2_name : winnerName;
 
-    return [{ matchId: nextMatch.id, updates: matchUpdates }];
+    // Si se quitó o cambió el participante y el siguiente partido tenía un resultado previo, resetearlo:
+    if (nextMatch.winner || (nextMatch.p1_score && nextMatch.p1_score.some(s => s))) {
+      matchUpdates.winner = null;
+      matchUpdates.is_wo = false;
+      matchUpdates.p1_score = ['', '', ''];
+      matchUpdates.p2_score = ['', '', ''];
+    }
+
+    // Auto-BYE en el siguiente partido
+    const isP1Real = finalP1 && finalP1 !== 'BYE' && !finalP1.startsWith('Zona ');
+    const isP2Real = finalP2 && finalP2 !== 'BYE' && !finalP2.startsWith('Zona ');
+
+    if (isP1Real && finalP2 === 'BYE') {
+      matchUpdates.winner = finalP1;
+      matchUpdates.is_wo = true;
+      matchUpdates.is_bye = true;
+    } else if (isP2Real && finalP1 === 'BYE') {
+      matchUpdates.winner = finalP2;
+      matchUpdates.is_wo = true;
+      matchUpdates.is_bye = true;
+    }
+
+    updatesArray.push({ matchId: nextMatch.id, updates: matchUpdates });
+    return updatesArray;
   }
 
   return [];

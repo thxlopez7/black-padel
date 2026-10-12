@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { updateMatch } from "../lib/supabaseService";
+import { determineWinnerFromScores } from "../lib/tournamentLogic";
 import SwapPairsModal from "./SwapPairsModal";
 import AddPairToDrawModal from "./AddPairToDrawModal";
 
@@ -334,7 +335,7 @@ export default function BracketView({
                   : 'bg-gray-950 text-gray-400 border border-gray-800 hover:text-white'
               }`}
             >
-              🌐 Todo el Cuadro
+              Cuadro Completo
             </button>
             {zones.length > 0 && (
               <button
@@ -345,7 +346,7 @@ export default function BracketView({
                     : 'bg-gray-950 text-gray-400 border border-gray-800 hover:text-white'
                 }`}
               >
-                🎾 Zonas ({zones.length})
+                Zonas ({zones.length})
               </button>
             )}
             {bracketByRound.map((round, rIdx) => {
@@ -360,7 +361,7 @@ export default function BracketView({
                       : 'bg-gray-950 text-gray-400 border border-gray-800 hover:text-white'
                   }`}
                 >
-                  {rIdx === bracketByRound.length - 1 ? '🥇 Final' : rIdx === bracketByRound.length - 2 ? '🏆 Semis' : rName}
+                  {rIdx === bracketByRound.length - 1 ? 'Final' : rIdx === bracketByRound.length - 2 ? 'Semifinales' : rName}
                 </button>
               );
             })}
@@ -387,14 +388,14 @@ export default function BracketView({
                       className="text-[9px] bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-800/60 px-2 py-0.5 rounded transition-colors font-bold uppercase tracking-wider"
                       title="Intercambiar parejas entre zonas"
                     >
-                      🔄 Canjear
+                      Intercambiar
                     </button>
                     <button
                       onClick={() => setShowAddPairModal(true)}
                       className="text-[9px] bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 px-2 py-0.5 rounded transition-colors font-bold uppercase tracking-wider"
                       title="Inscribir nueva pareja"
                     >
-                      ➕ Nueva
+                      + Pareja
                     </button>
                   </div>
                 )}
@@ -464,7 +465,7 @@ export default function BracketView({
 }
 
 function MatchEditorModal({ match, courts, onClose, onSave }) {
-  const safeArray = (arr) => Array.isArray(arr) ? arr : ['', '', ''];
+  const safeArray = (arr) => Array.isArray(arr) ? [...arr] : ['', '', ''];
   const [date, setDate] = useState(match.match_date || '');
   const [time, setTime] = useState(match.match_time ? match.match_time.slice(0, 5) : '');
   const [courtId, setCourtId] = useState(match.court_id ? String(match.court_id) : '');
@@ -477,39 +478,113 @@ function MatchEditorModal({ match, courts, onClose, onSave }) {
   const [p1Name, setP1Name] = useState(match.p1_name || '');
   const [p2Name, setP2Name] = useState(match.p2_name || '');
 
+  const effectiveP1 = (p1Name || match.p1_name || '').trim();
+  const effectiveP2 = (p2Name || match.p2_name || '').trim();
+
+  // Calcular ganador en tiempo real a partir de los puntajes
+  const calculatedWinner = !isWo ? determineWinnerFromScores(effectiveP1, effectiveP2, p1Score, p2Score) : null;
+
+  const updateScore = (playerIdx, setIdx, val) => {
+    let nextP1Score = [...p1Score];
+    let nextP2Score = [...p2Score];
+
+    if (playerIdx === 1) {
+      nextP1Score[setIdx] = val;
+      setP1Score(nextP1Score);
+    } else {
+      nextP2Score[setIdx] = val;
+      setP2Score(nextP2Score);
+    }
+
+    if (!isWo) {
+      const autoWinner = determineWinnerFromScores(effectiveP1, effectiveP2, nextP1Score, nextP2Score);
+      if (autoWinner) {
+        setWinner(autoWinner);
+      } else {
+        const hasScores = nextP1Score.some(s => s && String(s).trim() !== '') || nextP2Score.some(s => s && String(s).trim() !== '');
+        if (!hasScores) {
+          setWinner('null');
+        }
+      }
+    }
+  };
+
+  const handleP1NameChange = (val) => {
+    setP1Name(val);
+    if (!isWo) {
+      const autoWinner = determineWinnerFromScores(val.trim(), effectiveP2, p1Score, p2Score);
+      if (autoWinner) setWinner(autoWinner);
+    }
+  };
+
+  const handleP2NameChange = (val) => {
+    setP2Name(val);
+    if (!isWo) {
+      const autoWinner = determineWinnerFromScores(effectiveP1, val.trim(), p1Score, p2Score);
+      if (autoWinner) setWinner(autoWinner);
+    }
+  };
+
+  const handleToggleWo = (checked) => {
+    setIsWo(checked);
+    if (!checked) {
+      const autoWinner = determineWinnerFromScores(effectiveP1, effectiveP2, p1Score, p2Score);
+      setWinner(autoWinner || 'null');
+    }
+  };
+
+  const handleClearScore = () => {
+    setP1Score(['', '', '']);
+    setP2Score(['', '', '']);
+    setIsWo(false);
+    setWinner('null');
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
-    const isP1Bye = !p1Name || p1Name.trim().toUpperCase() === 'BYE';
-    const isP2Bye = !p2Name || p2Name.trim().toUpperCase() === 'BYE';
+    const isP1Bye = !effectiveP1 || effectiveP1.toUpperCase() === 'BYE';
+    const isP2Bye = !effectiveP2 || effectiveP2.toUpperCase() === 'BYE';
     const hasBye = isP1Bye || isP2Bye;
+
+    let finalWinner = winner === 'null' ? null : winner;
+    let finalIsWo = isWo;
+
+    if (hasBye) {
+      if (isP1Bye && !isP2Bye) {
+        finalWinner = effectiveP2;
+        finalIsWo = true;
+      } else if (isP2Bye && !isP1Bye) {
+        finalWinner = effectiveP1;
+        finalIsWo = true;
+      }
+    } else if (!finalIsWo) {
+      // Determinación automática del ganador por los puntajes ingresados
+      const autoWinner = determineWinnerFromScores(effectiveP1, effectiveP2, p1Score, p2Score);
+      if (autoWinner) {
+        finalWinner = autoWinner;
+      } else {
+        const hasScores = (p1Score || []).some(s => s && String(s).trim() !== '') || (p2Score || []).some(s => s && String(s).trim() !== '');
+        if (!hasScores) {
+          finalWinner = null;
+        }
+      }
+    }
 
     await onSave({
       match_date: date || null,
       match_time: time || null,
       court_id: courtId || null,
-      is_wo: isWo,
-      winner: winner === 'null' ? null : winner,
+      is_wo: finalIsWo,
+      winner: finalWinner,
       p1_score: p1Score,
       p2_score: p2Score,
-      p1_name: p1Name ? p1Name.trim() : null,
-      p2_name: p2Name ? p2Name.trim() : null,
+      p1_name: effectiveP1 || null,
+      p2_name: effectiveP2 || null,
       is_bye: hasBye
     });
     setLoading(false);
-  };
-
-  const updateScore = (playerIdx, setIdx, val) => {
-    if (playerIdx === 1) {
-      const newScore = [...p1Score];
-      newScore[setIdx] = val;
-      setP1Score(newScore);
-    } else {
-      const newScore = [...p2Score];
-      newScore[setIdx] = val;
-      setP2Score(newScore);
-    }
   };
 
   return (
@@ -527,7 +602,7 @@ function MatchEditorModal({ match, courts, onClose, onSave }) {
         
         <form onSubmit={handleSubmit} className="p-5 space-y-4 max-h-[82vh] overflow-y-auto custom-scrollbar">
           
-          {/* SECCIÓN 1: PROGRAMACIÓN DE HORARIO Y CANCHA (DESTACADA) */}
+          {/* SECCIÓN 1: PROGRAMACIÓN DE HORARIO Y CANCHA */}
           <div className="bg-gray-950 border border-gray-800 rounded-xl p-4 shadow-inner">
             <div className="flex items-center justify-between mb-3 border-b border-gray-800/80 pb-2">
               <span className="text-[11px] font-bold text-red-400 uppercase tracking-widest flex items-center gap-1.5">
@@ -604,10 +679,45 @@ function MatchEditorModal({ match, courts, onClose, onSave }) {
 
           {/* SECCIÓN 2: PAREJAS Y RESULTADOS */}
           <div className="bg-gray-950 border border-gray-800 rounded-xl p-4 shadow-inner">
-            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
-              <svg className="w-3.5 h-3.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
-              Parejas y Resultado
-            </span>
+            <div className="flex items-center justify-between mb-3 border-b border-gray-800/80 pb-2">
+              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                <svg className="w-3.5 h-3.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                Parejas y Resultado
+              </span>
+              {(winner !== 'null' || isWo || p1Score.some(s => s) || p2Score.some(s => s)) && (
+                <button
+                  type="button"
+                  onClick={handleClearScore}
+                  className="text-[10px] text-gray-500 hover:text-red-400 transition-colors uppercase font-semibold"
+                >
+                  ✕ Limpiar Resultado
+                </button>
+              )}
+            </div>
+
+            {/* Aviso en tiempo real de ganador detectado */}
+            {effectiveP1 && effectiveP2 && (
+              <div className="mb-3">
+                {calculatedWinner && !isWo ? (
+                  <div className="bg-emerald-950/60 border border-emerald-500/40 text-emerald-400 rounded-lg px-3 py-2 text-xs flex items-center justify-between font-medium animate-fade-up">
+                    <span className="flex items-center gap-1.5">
+                      <svg className="w-4 h-4 text-emerald-400 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                      Ganador detectado:
+                    </span>
+                    <span className="font-bold text-white truncate max-w-[190px]">{calculatedWinner}</span>
+                  </div>
+                ) : isWo && winner && winner !== 'null' ? (
+                  <div className="bg-amber-950/60 border border-amber-500/40 text-amber-400 rounded-lg px-3 py-2 text-xs flex items-center justify-between font-medium animate-fade-up">
+                    <span className="flex items-center gap-1.5">
+                      <span className="font-black text-amber-300">W.O.</span> Ganador por Walkover:
+                    </span>
+                    <span className="font-bold text-white truncate max-w-[190px]">{winner}</span>
+                  </div>
+                ) : null}
+              </div>
+            )}
 
             <div className="grid grid-cols-[1fr_36px_36px_36px] sm:grid-cols-[1fr_40px_40px_40px] gap-1.5 sm:gap-2 mb-2 text-[10px] text-gray-500 uppercase tracking-widest text-center mt-2">
               <div className="text-left font-bold truncate">Pareja</div>
@@ -620,7 +730,7 @@ function MatchEditorModal({ match, courts, onClose, onSave }) {
               <input 
                 type="text" 
                 value={p1Name} 
-                onChange={e => setP1Name(e.target.value)} 
+                onChange={e => handleP1NameChange(e.target.value)} 
                 placeholder={match.p1_name || "Esperando clasificación..."} 
                 className="w-full bg-gray-900 border border-gray-700 rounded-lg p-2 text-base sm:text-xs text-white focus:border-red-600 outline-none transition-colors" 
               />
@@ -633,7 +743,7 @@ function MatchEditorModal({ match, courts, onClose, onSave }) {
               <input 
                 type="text" 
                 value={p2Name} 
-                onChange={e => setP2Name(e.target.value)} 
+                onChange={e => handleP2NameChange(e.target.value)} 
                 placeholder={match.p2_name || "Esperando clasificación..."} 
                 className="w-full bg-gray-900 border border-gray-700 rounded-lg p-2 text-base sm:text-xs text-white focus:border-red-600 outline-none transition-colors" 
               />
@@ -644,7 +754,12 @@ function MatchEditorModal({ match, courts, onClose, onSave }) {
 
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-t border-gray-800/80 pt-3 gap-3 mt-4">
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={isWo} onChange={e => setIsWo(e.target.checked)} className="w-4 h-4 rounded border-gray-700 bg-gray-900 text-red-600 focus:ring-red-600" />
+                <input 
+                  type="checkbox" 
+                  checked={isWo} 
+                  onChange={e => handleToggleWo(e.target.checked)} 
+                  className="w-4 h-4 rounded border-gray-700 bg-gray-900 text-red-600 focus:ring-red-600" 
+                />
                 <span className="text-xs text-gray-300 font-medium">Ganador por W.O.</span>
               </label>
               
@@ -653,11 +768,11 @@ function MatchEditorModal({ match, courts, onClose, onSave }) {
                 <select 
                   value={winner} 
                   onChange={e => setWinner(e.target.value)} 
-                  className="bg-gray-900 border border-gray-700 rounded-lg p-2 text-base sm:text-xs text-red-500 font-bold focus:border-red-600 outline-none w-full sm:max-w-[160px] truncate"
+                  className="bg-gray-900 border border-gray-700 rounded-lg p-2 text-base sm:text-xs text-red-500 font-bold focus:border-red-600 outline-none w-full sm:max-w-[170px] truncate"
                 >
                   <option value="null">Sin definir</option>
-                  {(p1Name || match.p1_name) && <option value={p1Name || match.p1_name}>{p1Name || match.p1_name}</option>}
-                  {(p2Name || match.p2_name) && <option value={p2Name || match.p2_name}>{p2Name || match.p2_name}</option>}
+                  {(effectiveP1) && <option value={effectiveP1}>{effectiveP1}</option>}
+                  {(effectiveP2) && <option value={effectiveP2}>{effectiveP2}</option>}
                 </select>
               </div>
             </div>

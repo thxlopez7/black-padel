@@ -225,7 +225,7 @@ export default function AddPairToDrawModal({
                 className="w-full bg-gray-900 border border-gray-700 rounded-lg p-2.5 text-xs text-white focus:border-red-600 outline-none"
               >
                 {byeSlots.length > 0 && (
-                  <optgroup label="✨ Huecos Disponibles (BYEs)">
+                  <optgroup label="Cupos Disponibles (BYEs)">
                     {byeSlots.map(s => (
                       <option key={s.id} value={s.id}>
                         {s.zoneName} - Reemplaza BYE (vs {s.rivalPair})
@@ -257,11 +257,11 @@ export default function AddPairToDrawModal({
                 </p>
                 {selectedSlot.isBye ? (
                   <span className="inline-block mt-2 text-[10px] bg-emerald-950/60 text-emerald-400 border border-emerald-800/60 px-2 py-0.5 rounded font-bold">
-                    ✓ Habilita el partido para jugarse (elimina el pase directo por BYE).
+                    Habilita el partido para jugarse (elimina el pase directo por BYE).
                   </span>
                 ) : (
                   <span className="inline-block mt-2 text-[10px] bg-yellow-950/60 text-yellow-400 border border-yellow-800/60 px-2 py-0.5 rounded font-bold">
-                    ⚠️ Reemplazará a la pareja "{selectedSlot.currentPair}".
+                    Aviso: Reemplazará a la pareja "{selectedSlot.currentPair}".
                   </span>
                 )}
               </div>

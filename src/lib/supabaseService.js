@@ -19,6 +19,24 @@ export async function getSession() {
 
 // --- DB ---
 
+// --- SANITIZACIÓN & VALIDACIÓN DEFENSIVA ---
+export function sanitizeString(val, maxLength = 100) {
+  if (typeof val !== 'string') return val;
+  return val
+    .replace(/[<>]/g, '') // Eliminar etiquetas HTML para prevenir XSS
+    .trim()
+    .slice(0, maxLength);
+}
+
+export function sanitizeScores(scoreArray) {
+  if (!Array.isArray(scoreArray)) return ['', '', ''];
+  return scoreArray.slice(0, 3).map(s => {
+    if (s === null || s === undefined || s === '') return '';
+    const num = parseInt(String(s).trim(), 10);
+    return isNaN(num) || num < 0 || num > 99 ? '' : String(num);
+  });
+}
+
 // Categorías
 export async function getCategories() {
   const { data, error } = await supabase.from('categories').select('*').order('created_at', { ascending: true });
@@ -27,7 +45,9 @@ export async function getCategories() {
 }
 
 export async function addCategory(name, numPairs = 6) {
-  const { data, error } = await supabase.from('categories').insert([{ name, num_pairs: numPairs }]).select();
+  const cleanName = sanitizeString(name, 60);
+  const cleanNumPairs = Math.max(4, Math.min(64, Number(numPairs) || 6));
+  const { data, error } = await supabase.from('categories').insert([{ name: cleanName, num_pairs: cleanNumPairs }]).select();
   if (error) console.error("Error adding category:", error);
   return data ? data[0] : null;
 }
@@ -49,7 +69,8 @@ export async function getCourts() {
 }
 
 export async function addCourt(name) {
-  const { data, error } = await supabase.from('courts').insert([{ name }]).select();
+  const cleanName = sanitizeString(name, 50);
+  const { data, error } = await supabase.from('courts').insert([{ name: cleanName }]).select();
   if (error) console.error("Error adding court:", error);
   return data ? data[0] : null;
 }
@@ -68,13 +89,24 @@ export async function getPlayers() {
 }
 
 export async function addPlayer(playerData) {
-  const { data, error } = await supabase.from('players').insert([playerData]).select();
+  const cleanData = {
+    ...playerData,
+    name: sanitizeString(playerData?.name, 80),
+    partner: playerData?.partner ? sanitizeString(playerData.partner, 80) : null,
+    phone: playerData?.phone ? sanitizeString(playerData.phone, 30) : null,
+  };
+  const { data, error } = await supabase.from('players').insert([cleanData]).select();
   if (error) console.error("Error adding player:", error);
   return data ? data[0] : null;
 }
 
 export async function updatePlayer(id, playerData) {
-  const { data, error } = await supabase.from('players').update(playerData).eq('id', id).select();
+  const cleanData = { ...playerData };
+  if (cleanData.name !== undefined) cleanData.name = sanitizeString(cleanData.name, 80);
+  if (cleanData.partner !== undefined) cleanData.partner = cleanData.partner ? sanitizeString(cleanData.partner, 80) : null;
+  if (cleanData.phone !== undefined) cleanData.phone = cleanData.phone ? sanitizeString(cleanData.phone, 30) : null;
+  
+  const { data, error } = await supabase.from('players').update(cleanData).eq('id', id).select();
   if (error) console.error("Error updating player:", error);
   return data ? data[0] : null;
 }
@@ -93,7 +125,14 @@ export async function getMatches() {
 }
 
 export async function saveGeneratedMatches(matchesArray) {
-  const { data, error } = await supabase.from('matches').insert(matchesArray).select();
+  const cleanMatches = matchesArray.map(m => ({
+    ...m,
+    p1_name: m.p1_name ? sanitizeString(m.p1_name, 100) : null,
+    p2_name: m.p2_name ? sanitizeString(m.p2_name, 100) : null,
+    winner: m.winner ? sanitizeString(m.winner, 100) : null,
+    round_name: m.round_name ? sanitizeString(m.round_name, 50) : m.round_name
+  }));
+  const { data, error } = await supabase.from('matches').insert(cleanMatches).select();
   if (error) console.error("Error saving generated matches:", error);
   return data || [];
 }
@@ -105,12 +144,36 @@ export async function deleteMatchesByCategory(categoryId) {
 }
 
 export async function updateCategory(id, updates) {
-  const { data, error } = await supabase.from('categories').update(updates).eq('id', id).select();
+  const cleanUpdates = { ...updates };
+  if (cleanUpdates.name !== undefined) cleanUpdates.name = sanitizeString(cleanUpdates.name, 60);
+  const { data, error } = await supabase.from('categories').update(cleanUpdates).eq('id', id).select();
   if (error) console.error("Error updating category:", error);
   return data ? data[0] : null;
 }
+
 export async function updateMatch(id, updates) {
-  const { data, error } = await supabase.from('matches').update(updates).eq('id', id).select();
+  const cleanUpdates = { ...updates };
+  if (cleanUpdates.p1_name !== undefined) {
+    cleanUpdates.p1_name = cleanUpdates.p1_name ? sanitizeString(cleanUpdates.p1_name, 100) : null;
+  }
+  if (cleanUpdates.p2_name !== undefined) {
+    cleanUpdates.p2_name = cleanUpdates.p2_name ? sanitizeString(cleanUpdates.p2_name, 100) : null;
+  }
+  if (cleanUpdates.winner !== undefined) {
+    cleanUpdates.winner = cleanUpdates.winner ? sanitizeString(cleanUpdates.winner, 100) : null;
+  }
+  if (cleanUpdates.p1_score !== undefined) {
+    cleanUpdates.p1_score = cleanUpdates.p1_score ? sanitizeScores(cleanUpdates.p1_score) : null;
+  }
+  if (cleanUpdates.p2_score !== undefined) {
+    cleanUpdates.p2_score = cleanUpdates.p2_score ? sanitizeScores(cleanUpdates.p2_score) : null;
+  }
+  if (cleanUpdates.match_time !== undefined && cleanUpdates.match_time) {
+    // Validar formato de hora HH:MM
+    cleanUpdates.match_time = String(cleanUpdates.match_time).trim().slice(0, 8);
+  }
+
+  const { data, error } = await supabase.from('matches').update(cleanUpdates).eq('id', id).select();
   if (error) console.error("Error updating match:", error);
   return data ? data[0] : null;
 }
