@@ -14,8 +14,25 @@ const oswald = Oswald({
 });
 
 export const metadata = {
+  metadataBase: new URL("https://www.rdeventos.online"),
   title: "Circuito R.D Eventos",
-  description: "Sistema de gestión y fixture de R.D Eventos",
+  description: "Sistema de gestión y fixture de torneos de pádel - R.D Eventos",
+  openGraph: {
+    title: "Circuito R.D Eventos",
+    description: "Sistema de gestión y fixture de torneos de pádel - R.D Eventos",
+    url: "https://www.rdeventos.online",
+    siteName: "R.D Eventos",
+    images: [
+      {
+        url: "/RD.jpeg",
+        width: 800,
+        height: 600,
+        alt: "R.D Eventos",
+      },
+    ],
+    locale: "es_AR",
+    type: "website",
+  },
 };
 
 export default function RootLayout({ children }) {
