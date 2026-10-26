@@ -15,23 +15,29 @@ const oswald = Oswald({
 
 export const metadata = {
   metadataBase: new URL("https://www.rdeventos.online"),
-  title: "Circuito R.D Eventos",
-  description: "Sistema de gestión y fixture de torneos de pádel - R.D Eventos",
+  title: "Circuito Black Padel",
+  description: "Circuito Black Padel",
   openGraph: {
-    title: "Circuito R.D Eventos",
-    description: "Sistema de gestión y fixture de torneos de pádel - R.D Eventos",
+    title: "Circuito Black Padel",
+    description: "Circuito Black Padel",
     url: "https://www.rdeventos.online",
-    siteName: "R.D Eventos",
+    siteName: "Circuito Black Padel",
     images: [
       {
         url: "/RD.jpeg",
         width: 800,
         height: 600,
-        alt: "R.D Eventos",
+        alt: "Circuito Black Padel",
       },
     ],
     locale: "es_AR",
     type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Circuito Black Padel",
+    description: "Circuito Black Padel",
+    images: ["/RD.jpeg"],
   },
 };
 
