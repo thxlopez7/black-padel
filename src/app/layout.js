@@ -28,6 +28,7 @@ export const metadata = {
         width: 1024,
         height: 1024,
         alt: "Circuito Black Padel",
+        type: "image/png",
       },
     ],
     locale: "es_AR",
