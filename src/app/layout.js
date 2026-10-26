@@ -24,9 +24,9 @@ export const metadata = {
     siteName: "Circuito Black Padel",
     images: [
       {
-        url: "/RD.jpeg",
-        width: 800,
-        height: 600,
+        url: "https://www.rdeventos.online/og-image.png",
+        width: 1024,
+        height: 1024,
         alt: "Circuito Black Padel",
       },
     ],
@@ -37,7 +37,7 @@ export const metadata = {
     card: "summary_large_image",
     title: "Circuito Black Padel",
     description: "Circuito Black Padel",
-    images: ["/RD.jpeg"],
+    images: ["https://www.rdeventos.online/og-image.png"],
   },
 };
 
