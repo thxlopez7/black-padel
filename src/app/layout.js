@@ -14,8 +14,32 @@ const oswald = Oswald({
 });
 
 export const metadata = {
-  title: "Circuito Black Pádel",
-  description: "Sistema de gestión y fixture del Circuito Black Pádel",
+  metadataBase: new URL("https://www.rdeventos.online"),
+  title: "Circuito Black Padel",
+  description: "Circuito Black Padel",
+  openGraph: {
+    title: "Circuito Black Padel",
+    description: "Circuito Black Padel",
+    url: "https://www.rdeventos.online",
+    siteName: "Circuito Black Padel",
+    images: [
+      {
+        url: "https://www.rdeventos.online/og-image.png",
+        width: 1024,
+        height: 1024,
+        alt: "Circuito Black Padel",
+        type: "image/png",
+      },
+    ],
+    locale: "es_AR",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Circuito Black Padel",
+    description: "Circuito Black Padel",
+    images: ["https://www.rdeventos.online/og-image.png"],
+  },
 };
 
 export default function RootLayout({ children }) {

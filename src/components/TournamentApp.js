@@ -786,7 +786,7 @@ export default function TournamentApp({ initialCategories }) {
             onClick={() => { setMode("public"); setView("home"); }}
           >
             <h1 className="text-xl md:text-2xl font-title text-white tracking-widest">
-              <img src="/logo.png" alt="Black Club" className="h-16 md:h-20 w-auto object-contain" />
+              <img src="/RD.jpeg" alt="R.D Eventos" className="h-9 sm:h-12 w-auto object-contain rounded-md" />
             </h1>
           </div>
           
