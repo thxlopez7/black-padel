@@ -11,42 +11,50 @@ export default function AdminPlayers({ players, categories, onBack, onPlayersUpd
   const [categoryId, setCategoryId] = useState("");
   const [editingId, setEditingId] = useState(null);
 
+  const resetForm = () => {
+    setEditingId(null);
+    setName1("");
+    setName2("");
+    setCategoryId("");
+  };
+
   const handleSavePlayer = async () => {
-    if (!name1) {
-      showToast("Debes ingresar al menos el nombre del Jugador 1");
-      return;
-    }
-    
+    const player1 = name1.trim();
+    const player2 = name2.trim();
+    if (!player1) return showToast("Ingresa el nombre del jugador 1.", "error");
+
     const targetCat = categoryId || (selectedCatId !== "all" ? selectedCatId : null);
+    if (!targetCat) return showToast("Selecciona una categoría.", "error");
+
+    const label = `${player1}${player2 ? ' & ' + player2 : ''}`.toLowerCase();
+    const duplicated = players.some(p =>
+      p.id !== editingId &&
+      p.category_id === targetCat &&
+      `${p.name}${p.partner ? ' & ' + p.partner : ''}`.trim().toLowerCase() === label
+    );
+    if (duplicated) return showToast("Esa pareja ya está inscripta en la categoría.", "error");
+
     const playerData = {
-      name: name1,
-      partner: name2 || null,
+      name: player1,
+      partner: player2 || null,
       category_id: targetCat
     };
+    const targetCategory = categories.find(c => c.id === targetCat);
+    const drawDone = targetCategory && ['bracket', 'americano'].includes(targetCategory.current_step);
+    const drawNotice = drawDone ? " El sorteo de esta categoría ya se realizó: regenéralo para incluir los cambios." : "";
 
     if (editingId) {
       const updated = await updatePlayer(editingId, playerData);
-      if (updated) {
-        onPlayersUpdate(updated, "update");
-        setEditingId(null);
-        setName1("");
-        setName2("");
-        setCategoryId("");
-        showToast("Jugador actualizado");
-      } else {
-        showToast("Error al actualizar");
-      }
+      if (!updated) return showToast("No se pudo actualizar la pareja.", "error");
+      onPlayersUpdate(updated, "update");
+      resetForm();
+      showToast("Pareja actualizada." + drawNotice);
     } else {
       const added = await addPlayer(playerData);
-      if (added) {
-        onPlayersUpdate(added, "add");
-        setName1("");
-        setName2("");
-        setCategoryId("");
-        showToast("Jugador registrado con éxito");
-      } else {
-        showToast("Error al registrar el jugador");
-      }
+      if (!added) return showToast("No se pudo registrar la pareja.", "error");
+      onPlayersUpdate(added, "add");
+      resetForm();
+      showToast("Pareja registrada." + drawNotice);
     }
   };
 
@@ -58,13 +66,13 @@ export default function AdminPlayers({ players, categories, onBack, onPlayersUpd
   };
 
   const handleDeletePlayer = async (id) => {
-    if (confirm("¿Seguro que quieres eliminar este jugador?")) {
+    if (confirm("Se eliminará esta pareja. ¿Continuar?")) {
       const success = await deletePlayer(id);
       if (success) {
         onPlayersUpdate({ id }, "delete");
-        showToast("Jugador eliminado");
+        showToast("Pareja eliminada.");
       } else {
-        showToast("Error al eliminar el jugador");
+        showToast("No se pudo eliminar la pareja.", "error");
       }
     }
   };
@@ -81,7 +89,7 @@ export default function AdminPlayers({ players, categories, onBack, onPlayersUpd
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
             Volver
           </button>
-          <h2 className="text-2xl font-light text-white">Directorio de <span className="font-bold text-red-500">Jugadores</span></h2>
+          <h2 className="text-2xl font-light text-white">Parejas <span className="font-bold text-red-500">inscriptas</span></h2>
         </div>
       </div>
       
@@ -89,7 +97,7 @@ export default function AdminPlayers({ players, categories, onBack, onPlayersUpd
         
         {/* SIDEBAR: Filtros por Categoria */}
         <div className="lg:col-span-1 flex flex-col gap-2">
-          <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2 px-2">Filtrar por Categoría</h3>
+          <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2 px-2">Categoría</h3>
           <button 
             onClick={() => setSelectedCatId("all")}
             className={`text-left px-4 py-3 rounded-xl border transition-all text-sm font-semibold ${selectedCatId === "all" ? 'bg-red-600/10 border-red-600/50 text-red-500 shadow-md' : 'bg-gray-900 border-gray-800 text-gray-400 hover:bg-gray-800'}`}
@@ -103,7 +111,7 @@ export default function AdminPlayers({ players, categories, onBack, onPlayersUpd
               className={`text-left px-4 py-3 rounded-xl border transition-all text-sm font-semibold flex justify-between items-center ${selectedCatId === c.id ? 'bg-red-600/10 border-red-600/50 text-red-500 shadow-md' : 'bg-gray-900 border-gray-800 text-gray-400 hover:bg-gray-800'}`}
             >
               <span className="truncate">{c.name}</span>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full ${selectedCatId === c.id ? 'bg-red-600/20 text-cyan-300' : 'bg-gray-800'}`}>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full ${selectedCatId === c.id ? 'bg-red-600/20 text-red-300' : 'bg-gray-800'}`}>
                 {players.filter(p => p.category_id === c.id).length}
               </span>
             </button>
@@ -116,23 +124,23 @@ export default function AdminPlayers({ players, categories, onBack, onPlayersUpd
           {/* Formulario Arriba */}
           <div className="bg-gray-950 border border-gray-800 rounded-xl p-5 mb-8">
              <h3 className="text-sm font-bold text-white mb-4 uppercase tracking-widest flex justify-between items-center">
-               <span>{editingId ? 'Editando Jugador' : 'Agregar Nuevo Jugador'}</span>
-               {editingId && <button onClick={() => { setEditingId(null); setName1(''); setName2(''); setCategoryId(''); }} className="text-xs text-red-400 hover:underline">Cancelar Edición</button>}
+               <span>{editingId ? 'Editar pareja' : 'Nueva pareja'}</span>
+               {editingId && <button onClick={resetForm} className="text-xs text-red-400 hover:underline">Cancelar</button>}
              </h3>
              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
                 <div>
-                  <label className="block text-[10px] text-gray-500 uppercase tracking-widest mb-1.5 font-medium">Nombre Jugador 1</label>
-                  <input type="text" value={name1} onChange={e => setName1(e.target.value)} className="w-full bg-black border border-gray-800 rounded p-2.5 text-sm text-white outline-none focus:border-red-600 transition-colors" placeholder="Ej: Juan Perez" />
+                  <label className="block text-[10px] text-gray-500 uppercase tracking-widest mb-1.5 font-medium">Jugador 1</label>
+                  <input type="text" value={name1} onChange={e => setName1(e.target.value)} className="w-full bg-black border border-gray-800 rounded p-2.5 text-sm text-white outline-none focus:border-red-600 transition-colors" placeholder="Nombre y apellido" />
                 </div>
                 <div>
-                  <label className="block text-[10px] text-gray-500 uppercase tracking-widest mb-1.5 font-medium">Nombre Jugador 2 (Opcional)</label>
-                  <input type="text" value={name2} onChange={e => setName2(e.target.value)} className="w-full bg-black border border-gray-800 rounded p-2.5 text-sm text-white outline-none focus:border-red-600 transition-colors" placeholder="Ej: Carlos Gomez" />
+                  <label className="block text-[10px] text-gray-500 uppercase tracking-widest mb-1.5 font-medium">Jugador 2 (opcional)</label>
+                  <input type="text" value={name2} onChange={e => setName2(e.target.value)} className="w-full bg-black border border-gray-800 rounded p-2.5 text-sm text-white outline-none focus:border-red-600 transition-colors" placeholder="Nombre y apellido" />
                 </div>
                 {selectedCatId === "all" && !editingId ? (
                   <div>
                     <label className="block text-[10px] text-gray-500 uppercase tracking-widest mb-1.5 font-medium">Categoría</label>
                     <select value={categoryId} onChange={e => setCategoryId(e.target.value)} className="w-full bg-black border border-gray-800 rounded p-2.5 text-sm text-white outline-none focus:border-red-600 transition-colors">
-                      <option value="">Seleccionar Categoría</option>
+                      <option value="">Categoría</option>
                       {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                   </div>
@@ -140,14 +148,14 @@ export default function AdminPlayers({ players, categories, onBack, onPlayersUpd
                   <div>
                     <label className="block text-[10px] text-gray-500 uppercase tracking-widest mb-1.5 font-medium">Categoría</label>
                     <select value={categoryId} onChange={e => setCategoryId(e.target.value)} className="w-full bg-black border border-gray-800 rounded p-2.5 text-sm text-white outline-none focus:border-red-600 transition-colors">
-                      <option value="">Sin Categoría</option>
+                      <option value="">Categoría</option>
                       {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                   </div>
                 ) : null}
                 
-                <button onClick={handleSavePlayer} className={`w-full ${editingId ? 'bg-white text-gray-900 hover:bg-gray-300' : 'bg-red-600 text-gray-900 hover:bg-red-500'} font-bold py-2.5 rounded text-xs uppercase tracking-widest transition-all shadow-md md:col-span-full mt-2`}>
-                  {editingId ? 'Guardar Cambios' : `Agregar a ${selectedCatId === "all" ? 'Categoría Seleccionada' : categories.find(c=>c.id===selectedCatId)?.name}`}
+                <button onClick={handleSavePlayer} className={`w-full ${editingId ? 'bg-white text-gray-900 hover:bg-gray-300' : 'bg-red-600 text-white hover:bg-red-500'} font-bold py-2.5 rounded text-xs uppercase tracking-widest transition-all shadow-md md:col-span-full mt-2`}>
+                  {editingId ? 'Guardar cambios' : `Agregar a ${selectedCatId === "all" ? 'la categoría seleccionada' : categories.find(c=>c.id===selectedCatId)?.name}`}
                 </button>
              </div>
           </div>
@@ -155,12 +163,12 @@ export default function AdminPlayers({ players, categories, onBack, onPlayersUpd
           {/* Lista de Jugadores Filtrada */}
           <div>
             <h3 className="text-sm font-bold text-white mb-4 uppercase tracking-widest border-b border-gray-800 pb-2">
-              Mostrando: {selectedCatId === "all" ? "Todos los inscriptos" : categories.find(c=>c.id===selectedCatId)?.name}
+              Mostrando: {selectedCatId === "all" ? "Todas las categorías" : categories.find(c=>c.id===selectedCatId)?.name}
             </h3>
             
             <div className="space-y-3 overflow-y-auto max-h-[500px] custom-scrollbar pr-2">
               {filteredPlayers.length === 0 ? (
-                <div className="text-sm text-gray-500 italic p-4 text-center border border-dashed border-gray-800 rounded-lg">No hay jugadores en esta vista.</div>
+                <div className="text-sm text-gray-500 italic p-4 text-center border border-dashed border-gray-800 rounded-lg">No hay parejas inscriptas.</div>
               ) : (
                 filteredPlayers.map(p => {
                   const catName = categories.find(c => c.id === p.category_id)?.name || p.categories?.name || 'Sin categoría';
@@ -176,10 +184,10 @@ export default function AdminPlayers({ players, categories, onBack, onPlayersUpd
                         </div>
                       </div>
                       <div className="flex gap-2 w-full sm:w-auto justify-end opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => handleEditClick(p)} className="shrink-0 text-gray-400 hover:text-gray-300 bg-gray-900 p-2 rounded-lg border border-gray-800 hover:border-white/50 transition-colors" title="Editar Jugador">
+                        <button onClick={() => handleEditClick(p)} className="shrink-0 text-gray-400 hover:text-gray-300 bg-gray-900 p-2 rounded-lg border border-gray-800 hover:border-white/50 transition-colors" title="Editar pareja">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
                         </button>
-                        <button onClick={() => handleDeletePlayer(p.id)} className="shrink-0 text-gray-400 hover:text-red-400 bg-gray-900 p-2 rounded-lg border border-gray-800 hover:border-red-500/50 transition-colors" title="Eliminar Jugador">
+                        <button onClick={() => handleDeletePlayer(p.id)} className="shrink-0 text-gray-400 hover:text-red-400 bg-gray-900 p-2 rounded-lg border border-gray-800 hover:border-red-500/50 transition-colors" title="Eliminar pareja">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                         </button>
                       </div>

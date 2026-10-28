@@ -39,17 +39,34 @@ export function PromptModal({ title, placeholder, onConfirm, onCancel }) {
   );
 }
 
-export function Toast({ message, onClose }) {
+export function Toast({ message, type = "success", onClose }) {
   if (!message) return null;
+  const isError = type === "error";
   return (
-    <div className="fixed bottom-4 right-4 z-[60] bg-gray-900 border border-red-600/50 shadow-lg rounded-lg p-4 flex items-center gap-3 animate-fade-up">
-      <div className="w-8 h-8 rounded-full bg-red-600/20 flex items-center justify-center text-red-500">
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
+    <div role="status" className={`fixed bottom-20 md:bottom-4 right-4 left-4 md:left-auto md:max-w-md z-[110] bg-gray-900 border shadow-lg rounded-lg p-4 flex items-center gap-3 animate-fade-up ${isError ? "border-red-500" : "border-gray-700"}`}>
+      <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${isError ? "bg-red-600/30 text-red-400" : "bg-white/10 text-white"}`}>
+        {isError ? (
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"></path></svg>
+        ) : (
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
+        )}
       </div>
-      <p className="text-white text-sm font-medium">{message}</p>
-      <button onClick={onClose} className="ml-2 text-gray-500 hover:text-white">
+      <p className="text-white text-sm font-medium flex-1">{message}</p>
+      <button onClick={onClose} className="ml-2 text-gray-500 hover:text-white" aria-label="Cerrar aviso">
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
       </button>
     </div>
+  );
+}
+
+// Nombre de pareja en dos líneas (un jugador por línea) para que entre completo en pantallas chicas
+export function PairName({ name, fallback = "A definir" }) {
+  if (!name) return <span className="italic opacity-60">{fallback}</span>;
+  const players = name.split("&").map(p => p.trim()).filter(Boolean);
+  if (players.length < 2) return <span className="break-words">{name}</span>;
+  return (
+    <span className="flex flex-col leading-tight min-w-0">
+      {players.map((p, i) => <span key={i} className="break-words">{p}</span>)}
+    </span>
   );
 }

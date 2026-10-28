@@ -1,5 +1,45 @@
 import { supabase } from './supabase';
 
+// Todas las operaciones de escritura devuelven el registro guardado (o true)
+// y null/false si la base de datos rechaza la operación, para que la UI informe el error.
+
+function logError(context, error) {
+  console.error(`[supabase] ${context}:`, error?.message || error);
+}
+
+async function insertOne(table, row, context) {
+  const { data, error } = await supabase.from(table).insert([row]).select();
+  if (error || !data?.length) {
+    logError(context, error);
+    return null;
+  }
+  return data[0];
+}
+
+async function updateOne(table, id, updates, context) {
+  const { data, error } = await supabase.from(table).update(updates).eq('id', id).select();
+  if (error || !data?.length) {
+    logError(context, error || 'sin filas actualizadas (revisar permisos RLS)');
+    return null;
+  }
+  return data[0];
+}
+
+async function deleteWhere(table, column, value, context) {
+  const { error } = await supabase.from(table).delete().eq(column, value);
+  if (error) {
+    logError(context, error);
+    return false;
+  }
+  return true;
+}
+
+async function selectAll(query, context) {
+  const { data, error } = await query;
+  if (error) logError(context, error);
+  return data || [];
+}
+
 // --- AUTH ---
 export async function loginAdmin(email, password) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -17,114 +57,60 @@ export async function getSession() {
   return session;
 }
 
-// --- DB ---
+// --- Categorías ---
+export const getCategories = () =>
+  selectAll(supabase.from('categories').select('*').order('created_at', { ascending: true }), 'getCategories');
 
-// Categorías
-export async function getCategories() {
-  const { data, error } = await supabase.from('categories').select('*').order('created_at', { ascending: true });
-  if (error) console.error("Error fetching categories:", error);
-  return data || [];
-}
+export const addCategory = (name, numPairs = 6) =>
+  insertOne('categories', { name, num_pairs: numPairs }, 'addCategory');
 
-export async function addCategory(name, numPairs = 6) {
-  const { data, error } = await supabase.from('categories').insert([{ name, num_pairs: numPairs }]).select();
-  if (error) console.error("Error adding category:", error);
-  return data ? data[0] : null;
-}
+export const updateCategory = (id, updates) => updateOne('categories', id, updates, 'updateCategory');
 
 export async function deleteCategory(id) {
-  // Primero borramos los partidos y jugadores para evitar errores de llave foránea (si no hay CASCADE)
-  await supabase.from('matches').delete().eq('category_id', id);
-  await supabase.from('players').delete().eq('category_id', id);
-  const { error } = await supabase.from('categories').delete().eq('id', id);
-  if (error) console.error("Error deleting category:", error);
-  return !error;
+  // Se borran primero partidos y jugadores por si la base no tiene ON DELETE CASCADE
+  if (!(await deleteWhere('matches', 'category_id', id, 'deleteCategory/matches'))) return false;
+  if (!(await deleteWhere('players', 'category_id', id, 'deleteCategory/players'))) return false;
+  return deleteWhere('categories', 'id', id, 'deleteCategory');
 }
 
-// Canchas
-export async function getCourts() {
-  const { data, error } = await supabase.from('courts').select('*').order('created_at', { ascending: true });
-  if (error) console.error("Error fetching courts:", error);
-  return data || [];
-}
+// --- Canchas ---
+export const getCourts = () =>
+  selectAll(supabase.from('courts').select('*').order('created_at', { ascending: true }), 'getCourts');
 
-export async function addCourt(name) {
-  const { data, error } = await supabase.from('courts').insert([{ name }]).select();
-  if (error) console.error("Error adding court:", error);
-  return data ? data[0] : null;
-}
+export const addCourt = (name) => insertOne('courts', { name }, 'addCourt');
 
-export async function deleteCourt(id) {
-  const { error } = await supabase.from('courts').delete().eq('id', id);
-  if (error) console.error("Error deleting court:", error);
-  return !error;
-}
+export const deleteCourt = (id) => deleteWhere('courts', 'id', id, 'deleteCourt');
 
-// Jugadores
-export async function getPlayers() {
-  const { data, error } = await supabase.from('players').select('*, categories(name)').order('created_at', { ascending: false });
-  if (error) console.error("Error fetching players:", error);
-  return data || [];
-}
+// --- Jugadores ---
+export const getPlayers = () =>
+  selectAll(supabase.from('players').select('*, categories(name)').order('created_at', { ascending: true }), 'getPlayers');
 
-export async function addPlayer(playerData) {
-  const { data, error } = await supabase.from('players').insert([playerData]).select();
-  if (error) console.error("Error adding player:", error);
-  return data ? data[0] : null;
-}
+export const addPlayer = (playerData) => insertOne('players', playerData, 'addPlayer');
 
-export async function updatePlayer(id, playerData) {
-  const { data, error } = await supabase.from('players').update(playerData).eq('id', id).select();
-  if (error) console.error("Error updating player:", error);
-  return data ? data[0] : null;
-}
+export const updatePlayer = (id, playerData) => updateOne('players', id, playerData, 'updatePlayer');
 
-export async function deletePlayer(id) {
-  const { error } = await supabase.from('players').delete().eq('id', id);
-  if (error) console.error("Error deleting player:", error);
-  return !error;
-}
+export const deletePlayer = (id) => deleteWhere('players', 'id', id, 'deletePlayer');
 
-// Partidos
-export async function getMatches() {
-  const { data, error } = await supabase.from('matches').select('*').order('match_date', { ascending: true }).order('match_time', { ascending: true });
-  if (error) console.error("Error fetching matches:", error);
-  return data || [];
-}
+export const updatePlayerPayment = (playerId, hasPaid) =>
+  updateOne('players', playerId, { has_paid: hasPaid }, 'updatePlayerPayment');
+
+// --- Partidos ---
+export const getMatches = () =>
+  selectAll(
+    supabase.from('matches').select('*').order('match_date', { ascending: true }).order('match_time', { ascending: true }),
+    'getMatches'
+  );
 
 export async function saveGeneratedMatches(matchesArray) {
   const { data, error } = await supabase.from('matches').insert(matchesArray).select();
-  if (error) console.error("Error saving generated matches:", error);
-  return data || [];
-}
-
-export async function deleteMatchesByCategory(categoryId) {
-  const { error } = await supabase.from('matches').delete().eq('category_id', categoryId);
-  if (error) console.error("Error deleting old matches:", error);
-  return !error;
-}
-
-export async function updateCategory(id, updates) {
-  const { data, error } = await supabase.from('categories').update(updates).eq('id', id).select();
-  if (error) console.error("Error updating category:", error);
-  return data ? data[0] : null;
-}
-export async function updateMatch(id, updates) {
-  const { data, error } = await supabase.from('matches').update(updates).eq('id', id).select();
-  if (error) console.error("Error updating match:", error);
-  return data ? data[0] : null;
-}
-
-export async function updatePlayerPayment(playerId, hasPaid) {
-  const { data, error } = await supabase
-    .from('players')
-    .update({ has_paid: hasPaid })
-    .eq('id', playerId)
-    .select();
-    
-  if (error) {
-    console.error("Error updating player payment:", error);
+  if (error || !data) {
+    logError('saveGeneratedMatches', error);
     return null;
   }
-  return data[0];
+  return data;
 }
+
+export const deleteMatchesByCategory = (categoryId) =>
+  deleteWhere('matches', 'category_id', categoryId, 'deleteMatchesByCategory');
+
+export const updateMatch = (id, updates) => updateOne('matches', id, updates, 'updateMatch');
