@@ -235,3 +235,9 @@ test('horarios: las semis y finales sin definir de dos categorías con un jugado
     if (x.category_id !== y.category_id) assert.ok(Math.abs(t(x) - t(y)) >= 3600000, `${x.round_name} (${x.category_id}) y ${y.round_name} (${y.category_id}) a la misma hora`);
   }
 });
+
+test('nivel de categorías: Suma 9 > Suma 11 > 7ma > Mix', () => {
+  const names = ['Mix Black Padel', '7ma Caballero', 'Suma 11 Caballeros', 'Suma 9 Caballeros'];
+  assert.deepEqual([...names].sort((a, b) => L.categoryLevel(a) - L.categoryLevel(b)), ['Suma 9 Caballeros', 'Suma 11 Caballeros', '7ma Caballero', 'Mix Black Padel']);
+  assert.ok(L.categoryLevel('5ta Damas') < L.categoryLevel('7ma Caballero'));
+});

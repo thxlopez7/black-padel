@@ -683,6 +683,20 @@ export const DAY_PHASES = {
 const isSchedulable = (m) => !m.is_bye && m.p1_name !== 'BYE' && m.p2_name !== 'BYE';
 
 /**
+ * Nivel de una categoría para ordenar horarios: menor es mejor (juega más tarde).
+ * - "Suma 9": la suma de categorías de la pareja (9).
+ * - Categoría individual ("7ma", "5ta", "3ra"): se compara como una pareja de esa categoría (7ma → 14),
+ *   así queda por debajo de una Suma 11 y por encima de una Suma 15.
+ * - Sin número ("Mix Black Padel"): la más baja.
+ */
+export function categoryLevel(name = '') {
+  const suma = name.match(/suma\s*(\d+)/i);
+  if (suma) return Number(suma[1]);
+  const single = name.match(/(\d+)\s*(ra|da|ta|ma|va|na|a|ª|º|°)\b/i) || name.match(/(\d+)/);
+  return single ? Number(single[1]) * 2 : 99;
+}
+
+/**
  * Programador de horarios.
  *
  * Asigna fecha, hora y cancha a los partidos de las categorías seleccionadas (config.categoryIds):
@@ -692,7 +706,7 @@ const isSchedulable = (m) => !m.is_bye && m.p1_name !== 'BYE' && m.p2_name !== '
  *   y entre sus partidos se respeta el descanso mínimo (config.restMin).
  * - Tradicional: cada ronda empieza cuando terminó la anterior (zonas -> cuadro -> final).
  * - Americano: las fechas se ordenan cronológicamente y las semifinales y la final van después de todas.
- * - Las categorías más fuertes (número menor en el nombre) quedan en los horarios más tardíos.
+ * - Las categorías más fuertes (ver categoryLevel) quedan en los horarios más tardíos.
  * - Cada jornada admite ciertas instancias (day.phase, ver DAY_PHASES) y puede tener un tope
  *   de partidos (day.maxMatches) para no cargar de más un día.
  *   Si una instancia no entra en sus jornadas, usa el primer turno libre de otra (summary.outOfPhase).
@@ -711,10 +725,7 @@ export function generateGlobalSchedule(allMatches, categories, config) {
   const selected = new Set(categoryIds || categories.map(c => c.id));
   const courtIndex = (id) => courts.findIndex(c => c.id === id);
 
-  const getCatStrength = (catId) => {
-    const num = categories.find(c => c.id === catId)?.name.match(/(\d+)/);
-    return num ? parseInt(num[1]) : 99;
-  };
+  const getCatStrength = (catId) => categoryLevel(categories.find(c => c.id === catId)?.name);
 
   const hasSchedule = (m) => m.match_date && m.match_time && m.court_id;
   const isFixed = (m) => hasSchedule(m) && (!selected.has(m.category_id) || (m.winner && isSchedulable(m)));
@@ -829,14 +840,31 @@ export function generateGlobalSchedule(allMatches, categories, config) {
     return min;
   };
 
+  // Por instancia (grupos, semis, finales) y, dentro de cada una, de la categoría más baja a la mejor:
+  // las mejores categorías ocupan los horarios más tardíos. Dentro de una categoría se respeta el orden de rondas.
+  // En una jornada dedicada solo a semis o solo a finales se llena de atrás hacia adelante empezando por la
+  // mejor categoría: así la mejor juega el último turno y las demás quedan escalonadas antes.
+  const PHASE_ORDER = { grupos: 0, semis: 1, finals: 2 };
+  const dedicated = (s, phase) => s.phases.length === 1 && s.phases[0] === phase;
+  const latestFirst = (phase) => phase !== 'grupos' && slots.some(s => dedicated(s, phase));
+  const strengthOrder = (a, b) => (latestFirst(getPhase(a)) ? 1 : -1) * (getCatStrength(a.category_id) - getCatStrength(b.category_id));
   const ordered = [...toSchedule].sort((a, b) =>
+    PHASE_ORDER[getPhase(a)] - PHASE_ORDER[getPhase(b)] ||
+    strengthOrder(a, b) ||
     (a.round_index || 0) - (b.round_index || 0) ||
-    getCatStrength(b.category_id) - getCatStrength(a.category_id) ||
     (a.match_index || 0) - (b.match_index || 0)
   );
 
   const summary = {};
   const changed = [];
+  const phaseHours = {};
+  const notePhaseHour = (m, start) => {
+    if (!latestFirst(getPhase(m))) return;
+    const hours = (phaseHours[getPhase(m)] ??= new Map());
+    hours.set(m.category_id, Math.min(hours.get(m.category_id) ?? Infinity, start));
+  };
+  // Las categorías que no se reprograman también marcan su horario en semis y finales
+  fixed.forEach(m => notePhaseHour(m, slotStart(m.match_date, m.match_time)));
   const track = (info, slot) => {
     if (!info.first || slot.start < info.first.start) info.first = slot;
     if (!info.last || slot.start > info.last.start) info.last = slot;
@@ -853,6 +881,7 @@ export function generateGlobalSchedule(allMatches, categories, config) {
       if (start >= minStart && courtFree(m.court_id, start) && playersFree(list, start)) {
         claim(m, m.court_id, start);
         markRoundEnd(m, start);
+        notePhaseHour(m, start);
         info.scheduled++;
         track(info, { date: m.match_date, time: String(m.match_time).slice(0, 5), start });
         continue;
@@ -869,7 +898,13 @@ export function generateGlobalSchedule(allMatches, categories, config) {
       courtFree(s.courtId, s.start) &&
       playersFree(list, s.start);
     // Si en las jornadas de su instancia no hay lugar, se usa el primer turno libre de cualquier jornada
-    let slot = slots.find(s => fits(s, false));
+    // Cada categoría toma un horario anterior al de las mejores ya ubicadas en esa instancia
+    const strongerAt = Math.min(Infinity, ...[...(phaseHours[phase] || new Map())].filter(([cat]) => cat !== m.category_id).map(([, start]) => start));
+    let slot = latestFirst(phase)
+      ? [...slots].reverse().find(s => dedicated(s, phase) && s.start < strongerAt && fits(s, false))
+      : null;
+    if (slot) notePhaseHour(m, slot.start);
+    slot ??= slots.find(s => fits(s, false));
     if (!slot && strictPhase) {
       slot = slots.find(s => fits(s, true));
       if (slot) info.outOfPhase++;

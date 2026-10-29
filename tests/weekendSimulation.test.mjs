@@ -19,7 +19,7 @@ const t=m=>new Date(`${m.match_date}T${m.match_time}:00`).getTime();
 // --- verificaciones ---
 const problems=[];
 const slot=new Map(); sch.forEach(m=>{ if(!m.match_date) return; const k=m.court_id+t(m); if(slot.has(k)) problems.push('cancha doble '+k); slot.set(k,m);});
-const players=p=>p.includes('Tabla')?[]:p.split('&').map(x=>x.trim().toLowerCase());
+const players=p=>p.includes('Tabla')||p.startsWith('Ganador')?[]:p.split('&').map(x=>x.trim().toLowerCase());
 const agenda={}; sch.forEach(m=>{ if(!m.match_date) return; [m.p1_name,m.p2_name].flatMap(players).forEach(p=>{ (agenda[p]??=[]).forEach(x=>{ if(Math.abs(x-t(m))<(60+REST)*60000) problems.push(`superposición ${p} ${m.match_date} ${m.match_time}`);}); agenda[p].push(t(m)); }); });
 for (const c of cats){ const cm=sch.filter(m=>m.category_id===c.id); const fin=cm.find(m=>m.match_type==='AMERICANO_FINAL'); const last=Math.max(...cm.filter(m=>m.match_type==='AMERICANO').map(t)); if(!(t(fin)>last)) problems.push('final antes de grupos '+c.name); }
 
