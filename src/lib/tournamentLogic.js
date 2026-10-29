@@ -35,6 +35,7 @@ function getRoundNames(numRounds) {
   if (numRounds === 3) return ['Cuartos', 'Semis', 'Final']; 
   if (numRounds === 4) return ['Octavos', 'Cuartos', 'Semis', 'Final']; 
   if (numRounds === 5) return ['16avos', 'Octavos', 'Cuartos', 'Semis', 'Final']; 
+  if (numRounds === 6) return ['32avos', '16avos', 'Octavos', 'Cuartos', 'Semis', 'Final'];
   return ['Ronda 1', 'Ronda 2', 'Ronda 3', 'Ronda 4', 'Ronda 5'];
 }
 
@@ -100,6 +101,12 @@ export function generateTournamentMatches(categoryId, numPairs, pairsList, isRan
   }
   generatedMatches.push(...bracketRows(categoryId, bracketSizeFor(numZones)));
   return { pairs, generatedMatches: resolveGenerated(generatedMatches) };
+}
+
+// Nombre del 2º partido de zona: la ronda previa a un cuadro de "size" lugares (8 → Octavos, 4 → Cuartos)
+export function crossRoundName(size) {
+  const rounds = Math.log2(Math.max(size, 2)) + 1;
+  return getRoundNamesFor(rounds)[0];
 }
 
 // Filas vacías del cuadro para "size" lugares, desde la ronda 2 (después de zona y cruce)
@@ -596,6 +603,9 @@ export function resolveCategoryMatches(catMatches) {
 
   if (crosses.length > 0) {
     // --- 2º partido: cruces ganador/perdedor y clasificados al cuadro ---
+    // El 2º partido ya es eliminatorio: se llama como la ronda anterior a la primera del cuadro (Octavos antes de Cuartos)
+    const crossRound = crossRoundName(bracket.filter(m => m.round_index === firstRound).length * 2);
+    crosses.forEach((c, i) => setFields(c, { round_name: `${crossRound} ${ALPHABET[i]}` }));
     crossPairings(zones).forEach(([p1, p2], i) => crosses[i] && assignPair(crosses[i], p1, p2));
     const decided = crosses.every(c => c.winner);
     const seeds = decided ? crossQualifiers(zones, crosses).map(s => s.name) : [];

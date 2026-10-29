@@ -67,7 +67,7 @@ export default function BracketView({ unavailable = [], category, allMatches, co
             </div>
           )}
 
-          {/* CRUCE: 2º partido de zona */}
+          {/* 2º partido de zona (ya eliminatorio: Octavos, Cuartos...) */}
           {crosses.length > 0 && (
             <div className="flex flex-col justify-center gap-6 relative min-w-[280px]">
               {crosses.map(m => <MatchCard key={m.id} match={m} courts={courts} mode={mode} onEdit={setEditingMatch} />)}
