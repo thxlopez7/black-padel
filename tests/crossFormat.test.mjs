@@ -135,7 +135,11 @@ test('horarios: el 2º partido va después de la zona y el cuadro después del 2
   const end = (list) => Math.max(...list.map(t)) + 3600000;
   const zones = res.matches.filter(m => m.match_type === 'ZONE');
   const crosses = res.matches.filter(m => m.match_type === 'CROSS');
-  assert.ok(crosses.length > 0 && crosses.every(m => t(m) >= end(zones)));
+  // Cada 2º partido va después de las zonas de las que salen sus parejas
+  const zoneOf = (label) => zones.find(z => z.round_name === `ZONA ${label}`);
+  assert.ok(crosses.length > 0);
+  crosses.forEach(c => [c.p1_name, c.p2_name].map(n => n.match(/^Zona ([A-Z]) [12]º$/)?.[1]).filter(Boolean)
+    .forEach(l => zoneOf(l) && assert.ok(t(c) >= t(zoneOf(l)) + 3600000, `${c.round_name} después de ZONA ${l}`)));
   const bracket = res.matches.filter(m => m.match_type === 'BRACKET');
   const first = Math.min(...bracket.map(m => m.round_index));
   assert.ok(bracket.filter(m => m.round_index === first).every(m => t(m) >= end(crosses)));
@@ -253,7 +257,10 @@ test('horarios: un partido fijado se respeta y las rondas siguientes de su categ
   assert.ok(!res.matches.some(m => m.id === zone.id), 'el fijado no se reprograma');
   const t = (m) => new Date(`${m.match_date}T${m.match_time}:00`).getTime();
   const pinnedAt = t(zone);
-  res.matches.filter(m => m.match_type !== 'ZONE').forEach(m => assert.ok(t(m) >= pinnedAt + 3600000, `${m.round_name} después del partido fijado`));
+  // Lo que depende de esa zona (sus 2º partidos y el cuadro) va después; lo demás puede ir antes
+  const fromZoneC = res.matches.filter(m => m.match_type === 'CROSS' && [m.p1_name, m.p2_name].some(n => /^Zona C/.test(n)));
+  assert.ok(fromZoneC.length > 0);
+  [...fromZoneC, ...res.matches.filter(m => m.match_type === 'BRACKET')].forEach(m => assert.ok(t(m) >= pinnedAt + 3600000, `${m.round_name} después del partido fijado`));
   assert.ok(!res.matches.some(m => m.court_id === 'c1' && t(m) === pinnedAt), 'su cancha queda reservada');
 });
 
@@ -300,4 +307,31 @@ test('tabla de clasificados: 7ma con 9 parejas, provisoria y final, 4º y 5º va
   // Mix: el 1º pasa directo a la final
   const mix = resolve(build(6));
   assert.deepEqual(L.crossStandings(mix).rows.map(r => r.destination), ['Directo a Final', 'Semis B', 'Semis B']);
+});
+
+test('horarios: cancha principal para la mejor categoría y 2º partido sin esperar zonas ajenas', () => {
+  const a = resolve(build(9));
+  const b = withIds(L.generateAmericanoMatches('S9', 4, ['A1 & A2', 'B1 & B2', 'C1 & C2', 'D1 & D2'], false).generatedMatches);
+  const cats = [{ id: 'C', name: '7ma' }, { id: 'S9', name: 'Suma 9' }];
+  const day = (date) => ({ date, startTime: '10:00', endTime: '23:00', phase: 'todas' });
+  const res = L.generateGlobalSchedule([...a, ...b], cats, {
+    daysConfig: [day('2026-11-07')], matchDurationMin: 60, courts: [{ id: 'c1' }, { id: 'c2' }, { id: 'c3' }], categoryIds: ['C', 'S9'], featuredCourtId: 'c2'
+  });
+  const t = (m) => `${m.match_date} ${m.match_time}`;
+  const byTime = {};
+  res.matches.filter(m => m.match_date).forEach(m => (byTime[t(m)] ??= []).push(m));
+  Object.values(byTime).forEach(group => {
+    const featured = group.find(m => m.court_id === 'c2');
+    if (featured && group.some(m => m.category_id === 'S9')) assert.equal(featured.category_id, 'S9', 'la mejor categoría en la cancha principal');
+  });
+});
+
+test('horarios: tope de partidos seguidos por jugador', () => {
+  const a = withIds(L.generateAmericanoMatches('A', 5, ['Rolo & A1', 'B1 & B2', 'C1 & C2', 'D1 & D2', 'E1 & E2'], false, { withFinal: false }).generatedMatches);
+  const res = L.generateGlobalSchedule(a, [{ id: 'A', name: 'Suma 9' }], {
+    daysConfig: [{ date: '2026-11-07', startTime: '10:00', endTime: '23:00', phase: 'todas' }], matchDurationMin: 60, courts: [{ id: 'c1' }, { id: 'c2' }], categoryIds: ['A'], maxConsecutive: 2
+  });
+  assert.equal(res.unscheduled, 0);
+  const hours = res.matches.filter(m => /Rolo/.test(m.p1_name + m.p2_name)).map(m => Number(m.match_time.slice(0, 2))).sort((x, y) => x - y);
+  for (let i = 2; i < hours.length; i++) assert.ok(!(hours[i] - hours[i - 1] === 1 && hours[i - 1] - hours[i - 2] === 1), `tres seguidos: ${hours}`);
 });

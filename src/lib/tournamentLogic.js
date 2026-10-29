@@ -131,6 +131,11 @@ function bracketRows(categoryId, size) {
  * de la zona q (nunca la misma zona); los ganadores que sobran tienen BYE.
  */
 function crossPairings(zones) {
+  return crossPlan(zones).map(c => c.pair);
+}
+
+// Cruces del 2º partido con las zonas (índices) de las que sale cada pareja, en el orden de los partidos CROSS
+function crossPlan(zones) {
   const label = (z, i, place) => {
     if (!z.winner) return `Zona ${ALPHABET[i]} ${place}º`;
     if (place === 1) return z.winner;
@@ -139,20 +144,22 @@ function crossPairings(zones) {
   const real = [], byeWinners = [];
   zones.forEach((z, i) => {
     const hasBye = z.p1_name === 'BYE' || z.p2_name === 'BYE';
-    if (!hasBye) real.push({ w: label(z, i, 1), l: label(z, i, 2) });
-    else if (z.p1_name !== 'BYE' || z.p2_name !== 'BYE') byeWinners.push(z.p1_name === 'BYE' ? z.p2_name : z.p1_name);
+    if (!hasBye) real.push({ w: label(z, i, 1), l: label(z, i, 2), zone: i });
+    else if (z.p1_name !== 'BYE' || z.p2_name !== 'BYE') byeWinners.push({ name: z.p1_name === 'BYE' ? z.p2_name : z.p1_name, zone: i });
   });
   const m = real.length;
-  const pairings = [];
+  const plan = [];
   const usedWinners = new Set();
-  byeWinners.forEach((b, j) => pairings.push([b, j < m ? real[j].l : 'BYE']));
+  byeWinners.forEach((b, j) => plan.push(j < m
+    ? { pair: [b.name, real[j].l], zones: [b.zone, real[j].zone] }
+    : { pair: [b.name, 'BYE'], zones: [b.zone] }));
   for (let q = byeWinners.length; q < m; q++) {
     const wi = (q - 1 + m) % m;
     usedWinners.add(wi);
-    pairings.push([real[wi].w, real[q].l]);
+    plan.push({ pair: [real[wi].w, real[q].l], zones: [real[wi].zone, real[q].zone] });
   }
-  real.forEach((r, i) => { if (!usedWinners.has(i)) pairings.push([r.w, 'BYE']); });
-  return pairings;
+  real.forEach((r, i) => { if (!usedWinners.has(i)) plan.push({ pair: [r.w, 'BYE'], zones: [r.zone] }); });
+  return plan;
 }
 
 // Número fijo por pareja para el sorteo de desempate: siempre da lo mismo para la misma pareja y categoría,
@@ -775,6 +782,8 @@ export function categoryLevel(name = '') {
  *   Si una instancia no entra en sus jornadas, usa el primer turno libre de otra (summary.outOfPhase).
  * - Un cierre menor o igual al inicio (ej. 19:00 a 00:00) termina al día siguiente.
  * - config.unavailable: franjas en las que una pareja no puede jugar (ver unavailableWindow).
+ * - config.maxConsecutive: máximo de partidos seguidos de un jugador (sin descanso entre medio).
+ * - config.featuredCourtId: cancha principal; a la misma hora la usa la mejor categoría.
  * - config.pinnedIds: partidos con horario pedido por el organizador; se respetan y el resto se acomoda
  *   alrededor (las rondas siguientes de su categoría van después).
  * - config.keepExisting: conserva los horarios ya asignados que siguen siendo válidos y solo
@@ -825,8 +834,17 @@ export function generateGlobalSchedule(allMatches, categories, config) {
     players(m).forEach(({ p }) => busy.set(p, (busy.get(p) || []).filter(b => b.id !== m.id)));
   };
   const courtFree = (courtId, start) => !taken.some(o => o.courtId === courtId && Math.abs(o.start - start) < durationMs);
+  // Tope de partidos seguidos por jugador (config.maxConsecutive): con 2, después de dos partidos pegados descansa
+  const maxConsecutive = Number(config.maxConsecutive) || Infinity;
+  const tooManyInARow = (p, start) => {
+    const times = new Set((busy.get(p) || []).filter(b => !b.maybe).map(b => b.start));
+    let run = 1;
+    for (let t = start - durationMs; times.has(t); t -= durationMs) run++;
+    for (let t = start + durationMs; times.has(t); t += durationMs) run++;
+    return run > maxConsecutive;
+  };
   const playersFree = (list, start) => list.every(({ p, maybe, cat }) => (busy.get(p) || []).every(b =>
-    Math.abs(b.start - start) >= gapMs || (b.cat === cat && (b.maybe || maybe))));
+    Math.abs(b.start - start) >= gapMs || (b.cat === cat && (b.maybe || maybe))) && (maybe || !tooManyInARow(p, start)));
 
   // Turnos disponibles por jornada
   const windows = daysConfig.map((day, i) => {
@@ -897,7 +915,19 @@ export function generateGlobalSchedule(allMatches, categories, config) {
     roundEnd.set(key, Math.max(roundEnd.get(key) || 0, start + durationMs));
   };
   fixed.filter(m => selected.has(m.category_id)).forEach(m => markRoundEnd(m, slotStart(m.match_date, m.match_time)));
+  // Cada 2º partido espera solo a las zonas de las que salen sus parejas (no a todas las zonas de la categoría)
+  const current = new Map([...allMatches, ...toSchedule].map(m => [m.id, m]));
+  const crossSources = new Map();
+  new Set(allMatches.filter(m => m.match_type === 'CROSS').map(m => m.category_id)).forEach(catId => {
+    const zones = allMatches.filter(m => m.category_id === catId && m.match_type === 'ZONE').sort((a, b) => a.match_index - b.match_index);
+    const crosses = allMatches.filter(m => m.category_id === catId && m.match_type === 'CROSS').sort((a, b) => a.match_index - b.match_index);
+    crossPlan(zones).forEach((c, i) => crosses[i] && crossSources.set(crosses[i].id, c.zones.map(z => zones[z].id)));
+  });
   const earliestStart = (m) => {
+    if (m.match_type === 'CROSS' && crossSources.has(m.id)) {
+      return Math.max(0, ...crossSources.get(m.id).map(id => current.get(id)).filter(z => z && hasSchedule(z) && isSchedulable(z))
+        .map(z => slotStart(z.match_date, z.match_time) + durationMs + restMs));
+    }
     if (m.match_type !== 'BRACKET' && m.match_type !== 'CROSS' && !AMERICANO_PLAYOFF.includes(m.match_type)) return 0;
     let min = 0;
     for (const [key, end] of roundEnd) {
@@ -1001,6 +1031,29 @@ export function generateGlobalSchedule(allMatches, categories, config) {
   if (keepExisting && unscheduled > 0) {
     const full = generateGlobalSchedule(allMatches, categories, { ...config, keepExisting: false });
     if (full.unscheduled < unscheduled) return full;
+  }
+  // Cancha principal: a la misma hora, el partido de la mejor categoría va a esa cancha (entre los que se reprograman)
+  if (config.featuredCourtId) {
+    const byStart = new Map();
+    ordered.filter(m => m.match_date && m.court_id).forEach(m => {
+      const key = slotStart(m.match_date, m.match_time);
+      byStart.set(key, [...(byStart.get(key) || []), m]);
+    });
+    for (const [start, group] of byStart) {
+      const best = group.reduce((a, b) => (getCatStrength(b.category_id) < getCatStrength(a.category_id) ? b : a));
+      if (best.court_id === config.featuredCourtId) continue;
+      const onFeatured = group.find(m => m.court_id === config.featuredCourtId);
+      if (onFeatured) {
+        if (getCatStrength(best.category_id) === getCatStrength(onFeatured.category_id)) continue;
+        [onFeatured.court_id, best.court_id] = [best.court_id, onFeatured.court_id];
+        [onFeatured, best].forEach(m => { if (!changed.includes(m)) changed.push(m); });
+      } else if (!fixed.some(f => f.court_id === config.featuredCourtId && Math.abs(slotStart(f.match_date, f.match_time) - start) < durationMs)
+        && !ordered.some(o => o !== best && o.court_id === config.featuredCourtId && o.match_date && Math.abs(slotStart(o.match_date, o.match_time) - start) < durationMs)) {
+        // La cancha principal está libre a esa hora: el mejor partido pasa ahí
+        best.court_id = config.featuredCourtId;
+        if (!changed.includes(best)) changed.push(best);
+      }
+    }
   }
   return { matches: ordered, changed, unscheduled, summary };
 }

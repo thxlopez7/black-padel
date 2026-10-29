@@ -244,13 +244,13 @@ export default function AmericanoView({ unavailable = [], category, allMatches, 
                     <tr className="bg-gray-950/70 border-b border-gray-800 text-[10px] text-gray-400 font-bold uppercase tracking-wider text-center">
                       <th className="py-3 px-3 text-center w-12">#</th>
                       <th className="py-3 px-4 text-left">Pareja</th>
-                      <th className="py-3 px-2 w-10">PJ</th>
-                      <th className="py-3 px-2 w-10">PG</th>
-                      <th className="py-3 px-2 w-10">PP</th>
-                      <th className="py-3 px-2 w-12">GF</th>
-                      <th className="py-3 px-2 w-12">GC</th>
-                      <th className="py-3 px-2 w-12">DIF</th>
-                      <th className="py-3 px-3 w-16 bg-red-950/20 text-red-400 font-black">PTS</th>
+                      <th className="py-3 px-2 w-10" title="Partidos jugados">PJ</th>
+                      <th className="py-3 px-2 w-10" title="Partidos ganados">PG</th>
+                      <th className="py-3 px-2 w-10" title="Partidos perdidos">PP</th>
+                      <th className="py-3 px-2 w-12" title="Games a favor">GF</th>
+                      <th className="py-3 px-2 w-12" title="Games en contra">GC</th>
+                      <th className="py-3 px-2 w-12" title="Diferencia de games (GF − GC)">DIF</th>
+                      <th className="py-3 px-3 w-16 bg-red-950/20 text-red-400 font-black" title="Puntos: 3 por partido ganado">PTS</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-800/60 font-medium">
@@ -311,7 +311,7 @@ export default function AmericanoView({ unavailable = [], category, allMatches, 
 
               <div className="p-3 bg-gray-950/60 border-t border-gray-800 text-[10px] text-gray-500 flex flex-wrap justify-between items-center gap-2">
                 <span>Desempate: puntos, resultado entre sí (empate entre dos parejas), diferencia de sets, diferencia de games y games a favor.</span>
-                <span>PJ: jugados. PG: ganados. PP: perdidos.</span>
+                <span>PJ: partidos jugados · PG: ganados · PP: perdidos · GF: games a favor · GC: games en contra · DIF: diferencia de games (GF − GC) · PTS: puntos (3 por partido ganado)</span>
               </div>
             </div>
 
