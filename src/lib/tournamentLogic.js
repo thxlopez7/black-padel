@@ -179,6 +179,43 @@ export function crossQualifiers(zones, crosses) {
     .sort((a, b) => b.wins - a.wins || a.draw - b.draw);
 }
 
+/**
+ * Tabla de clasificados del 2º partido para mostrar: posición, pareja (o el partido que falta), partidos ganados,
+ * si el lugar se definió por sorteo y a qué ronda entra ("Directo a Semis", "Cuartos B").
+ * Mientras falten resultados del 2º partido es provisoria (final: false): los lugares sin pareja quedan
+ * vacíos y pending lista los partidos que faltan.
+ */
+export function crossStandings(catMatches) {
+  const zones = catMatches.filter(m => m.match_type === 'ZONE');
+  const crosses = catMatches.filter(m => m.match_type === 'CROSS').sort((a, b) => a.match_index - b.match_index);
+  const bracket = catMatches.filter(m => m.match_type === 'BRACKET');
+  if (crosses.length === 0 || bracket.length === 0) return { rows: [], pending: [], final: true };
+  const firstRound = Math.min(...bracket.map(m => m.round_index));
+  const first = bracket.filter(m => m.round_index === firstRound).sort((a, b) => a.match_index - b.match_index);
+  const nextRound = bracket.filter(m => m.round_index === firstRound + 1);
+  const order = seedPositions(first.length * 2);
+  const total = crosses.length;
+  // Ronda a la que entra cada posición: si su rival en la primera ronda sería un lugar vacío, pasa directo
+  const destination = (pos) => {
+    const idx = order.indexOf(pos);
+    const match = first[Math.floor(idx / 2)];
+    if (order[idx ^ 1] > total) {
+      const next = nextRound.find(m => m.match_index === Math.floor(match.match_index / 2));
+      return `Directo a ${(next?.round_name || '').replace(/ [A-Z]$/, '')}`;
+    }
+    return match.round_name;
+  };
+  const known = crossQualifiers(zones, crosses);
+  const tiedWins = new Set(known.filter(q => known.filter(o => o.wins === q.wins).length > 1).map(q => q.wins));
+  // Los lugares que dependen de partidos sin jugar quedan "A definir": el orden final depende de esos resultados
+  const pending = crosses.filter(c => !c.winner).map(c => c.round_name);
+  const rows = Array.from({ length: total }, (_, i) => {
+    const q = known[i];
+    return { pos: i + 1, name: q?.name || null, wins: q?.wins ?? null, draw: q ? tiedWins.has(q.wins) : false, destination: destination(i + 1) };
+  });
+  return { rows, pending, final: pending.length === 0 };
+}
+
 function generateLegacyMatches(categoryId, numPairs, pairsList, isRandom) {
   if (!BRACKET_MAPS[numPairs]) {
     throw new Error(`No existe un cuadro definido para ${numPairs} parejas.`);

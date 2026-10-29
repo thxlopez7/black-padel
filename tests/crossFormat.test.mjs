@@ -285,3 +285,19 @@ test('el 2º partido se llama como la ronda previa al cuadro: Octavos en 7ma (9)
   assert.equal(of(resolve(build(20)), 'CROSS')[0].round_name, '16avos A');
   assert.equal(of(resolve(build(12)), 'CROSS')[0].round_name, 'Octavos A');
 });
+
+test('tabla de clasificados: 7ma con 9 parejas, provisoria y final, 4º y 5º van a cuartos', () => {
+  const all = resolve(build(9));
+  let t = L.crossStandings(all);
+  assert.equal(t.final, false);
+  assert.equal(t.rows.length, 5);
+  assert.deepEqual(t.rows.map(r => r.destination), ['Directo a Semis', 'Directo a Semis', 'Directo a Semis', 'Cuartos B', 'Cuartos B']);
+  playAll(all, () => 1);
+  t = L.crossStandings(all);
+  assert.equal(t.final, true);
+  const quarters = of(all, 'BRACKET').find(m => m.round_name === 'Cuartos B');
+  assert.deepEqual([t.rows[3].name, t.rows[4].name].sort(), [quarters.p1_name, quarters.p2_name].sort(), '4º y 5º de la tabla son los de Cuartos B');
+  // Mix: el 1º pasa directo a la final
+  const mix = resolve(build(6));
+  assert.deepEqual(L.crossStandings(mix).rows.map(r => r.destination), ['Directo a Final', 'Semis B', 'Semis B']);
+});

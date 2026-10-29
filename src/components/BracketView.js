@@ -4,6 +4,7 @@ import { PairName } from "./UIComponents";
 import { useState } from "react";
 import MatchEditorModal from "./MatchEditorModal";
 import { formatMatchSchedule } from "../lib/format";
+import { crossStandings } from "../lib/tournamentLogic";
 
 export default function BracketView({ unavailable = [], category, allMatches, courts, mode, onBack, onMatchUpdate }) {
   const [editingMatch, setEditingMatch] = useState(null);
@@ -27,6 +28,8 @@ export default function BracketView({ unavailable = [], category, allMatches, co
   const visibleRounds = bracketByRound;
   // Con dos partidos de zona, quien pasa directo aparece en la ronda siguiente: no se muestran partidos contra BYE
   const hideByeCards = crosses.length > 0;
+  // Orden de los ganadores del 2º partido: define quién pasa directo y quién juega la ronda previa
+  const standings = crossStandings(matches);
 
   const renderChampion = () => {
     const finalRound = visibleRounds[visibleRounds.length - 1];
@@ -71,6 +74,31 @@ export default function BracketView({ unavailable = [], category, allMatches, co
           {crosses.length > 0 && (
             <div className="flex flex-col justify-center gap-6 relative min-w-[280px]">
               {crosses.map(m => <MatchCard key={m.id} match={m} courts={courts} mode={mode} onEdit={setEditingMatch} />)}
+            </div>
+          )}
+
+          {/* CLASIFICADOS */}
+          {standings.rows.length > 0 && (
+            <div className="flex flex-col justify-center relative min-w-[280px] max-w-[320px]">
+              <div className="bg-gray-950 border border-gray-800 rounded-lg overflow-hidden">
+                <div className="text-[0.65rem] font-black tracking-widest uppercase px-4 py-1.5 flex justify-between items-center bg-gray-800 text-red-500 border-b border-gray-700">
+                  <span>Clasificados</span>
+                  {!standings.final && <span className="text-gray-400 font-semibold normal-case tracking-normal">provisorio</span>}
+                </div>
+                {standings.rows.map(r => (
+                  <div key={r.pos} className="grid grid-cols-[22px_1fr_auto] items-center gap-2 px-3 py-2 border-b border-gray-800/60 last:border-b-0 text-[0.72rem]">
+                    <span className="text-gray-500 font-bold">{r.pos}º</span>
+                    <span className={`min-w-0 ${r.name ? 'text-gray-200' : 'text-gray-500 italic'}`}>
+                      <PairName name={r.name} />
+                      {r.name && <span className="block text-[0.62rem] text-gray-500">{r.wins} {r.wins === 1 ? 'ganado' : 'ganados'}{r.draw ? ' · sorteo' : ''}</span>}
+                    </span>
+                    <span className={`text-[0.62rem] font-semibold text-right ${r.destination.startsWith('Directo') ? 'text-red-400' : 'text-gray-400'}`}>{r.destination}</span>
+                  </div>
+                ))}
+                {standings.pending.length > 0 && (
+                  <div className="px-3 py-2 text-[0.62rem] text-gray-500 border-t border-gray-800">Faltan: {standings.pending.join(', ')}</div>
+                )}
+              </div>
             </div>
           )}
 
