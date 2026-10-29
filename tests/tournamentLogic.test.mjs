@@ -100,12 +100,13 @@ assert.equal(all[0].match_time, undefined, 'input not mutated');
   const g = L.generateAmericanoMatches('A',4,['a&b','c&d','e&f','g&h'],false).generatedMatches;
   assert.equal(g.filter(m=>m.match_type==='AMERICANO_FINAL').length,1,'final por defecto');
 
-  // Jugador inscripto en dos categorías: nunca superpuesto, ni contra horarios fijos de otra categoría
+  // Jugador inscripto en dos categorías: nunca superpuesto, ni contra horarios fijos de otra categoría.
+  // Sus semis y finales sin definir tampoco se superponen (puede llegar a ambas), por eso la jornada es larga
   const A = withIds(L.generateAmericanoMatches('CA',4,['Juan & Pedro','Luis & Mario','Ana & Bea','Carla & Dora'],false).generatedMatches,'CA');
   const B = withIds(L.generateAmericanoMatches('CB',4,['Juan & Sofi','Tomi & Nico','Eva & Flor','Gabi & Hana'],false).generatedMatches,'CB');
   const fixedOther = [{id:'f1',category_id:'CX',match_type:'AMERICANO',p1_name:'Juan & Zoe',p2_name:'X & Y',match_date:'2026-11-01',match_time:'09:00:00',court_id:'c3',round_index:0}];
   const cats=[{id:'CA',name:'5ta'},{id:'CB',name:'Mixto'},{id:'CX',name:'Otra'}];
-  const r = L.generateGlobalSchedule([...A,...B,...fixedOther], cats, {daysConfig:[day('todas','08:00','02:00')],matchDurationMin:60,courts,categoryIds:['CA','CB'],restMin:30});
+  const r = L.generateGlobalSchedule([...A,...B,...fixedOther], cats, {daysConfig:[day('todas','08:00','07:00')],matchDurationMin:60,courts,categoryIds:['CA','CB'],restMin:30});
   assert.equal(r.unscheduled,0);
   const juan = [...r.matches,...fixedOther].filter(m=>/Juan/.test(m.p1_name+m.p2_name)).map(t).sort((x,y)=>x-y);
   for (let i=1;i<juan.length;i++) assert.ok(juan[i]-juan[i-1] >= 90*60000, 'Juan descanso 30 min entre partidos');

@@ -30,11 +30,13 @@ function nextWeekday(weekday) {
   return toLocalDateString(new Date(today.getFullYear(), today.getMonth(), today.getDate() + ((weekday - today.getDay() + 7) % 7)));
 }
 
-// Viernes de noche y sábado completo para grupos; domingo para semifinales y finales
+// Viernes de noche con pocos partidos (el fuerte es el sábado), sábado completo para grupos y
+// domingo con semifinales a la mañana y finales a la tarde
 const weekendTemplate = (friday) => [
-  { date: friday, startTime: '19:00', endTime: '00:00', phase: 'grupos', maxMatches: '' },
+  { date: friday, startTime: '19:00', endTime: '00:00', phase: 'grupos', maxMatches: 6 },
   { date: addDays(friday, 1), startTime: '10:00', endTime: '00:00', phase: 'grupos', maxMatches: '' },
-  { date: addDays(friday, 2), startTime: '10:00', endTime: '19:00', phase: 'playoffs', maxMatches: '' }
+  { date: addDays(friday, 2), startTime: '11:00', endTime: '15:00', phase: 'semis', maxMatches: '' },
+  { date: addDays(friday, 2), startTime: '15:00', endTime: '19:00', phase: 'finals', maxMatches: '' }
 ];
 
 // La última configuración aplicada se recuerda para reprogramar en cascada (parejas de último momento)
@@ -60,6 +62,16 @@ function cascadeConfig(matches, courts) {
   if (saved?.daysConfig?.length) {
     const ids = saved.courtIds?.filter(id => courts.some(c => c.id === id));
     return { ...saved, courts: ids?.length ? courts.filter(c => ids.includes(c.id)) : courts };
+  }
+  // Horarios de un fin de semana viernes a domingo: se usa la misma plantilla con la que se armaron
+  const dates = [...new Set(matches.filter(m => m.match_date).map(m => m.match_date))].sort();
+  if (dates.length) {
+    const [y, mo, d] = dates[0].split('-').map(Number);
+    const friday = addDays(dates[0], -((new Date(y, mo - 1, d).getDay() + 2) % 7));
+    const template = weekendTemplate(friday);
+    if (dates.every(date => template.some(t => t.date === date))) {
+      return { daysConfig: template.map(t => ({ ...t, maxMatches: Number(t.maxMatches) || null })), matchDurationMin: 60, restMin: 0, courts };
+    }
   }
   const byDate = {};
   matches.filter(m => m.match_date && m.match_time).forEach(m => {

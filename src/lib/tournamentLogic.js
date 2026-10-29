@@ -722,17 +722,33 @@ export function generateGlobalSchedule(allMatches, categories, config) {
   // Turnos de cancha y agenda de cada jugador ya comprometidos (owner = id del partido)
   const taken = [];
   const busy = new Map();
-  const players = (m) => [m.p1_name, m.p2_name].flatMap(playersOf);
+  // Un lugar todavía sin definir ("Ganador Semis A", "1º Tabla Americano") puede terminar ocupándolo cualquier
+  // jugador de la categoría: se reservan todos frente a las otras categorías, así nadie que juega en dos queda
+  // con partidos a la vez. Dentro de la misma categoría el orden de las rondas ya los separa.
+  const categoryPlayers = new Map();
+  allMatches.filter(m => m.match_type === 'ZONE' || m.match_type === 'AMERICANO').forEach(m => {
+    const set = categoryPlayers.get(m.category_id) || new Set();
+    [m.p1_name, m.p2_name].flatMap(playersOf).forEach(p => set.add(p));
+    categoryPlayers.set(m.category_id, set);
+  });
+  const players = (m) => {
+    const sides = [m.p1_name, m.p2_name];
+    const known = sides.flatMap(playersOf);
+    const open = sides.some(n => n !== 'BYE' && isPlaceholder(n));
+    const all = open ? [...new Set([...known, ...(categoryPlayers.get(m.category_id) || [])])] : known;
+    return all.map(p => ({ p, maybe: !known.includes(p), cat: m.category_id }));
+  };
   const claim = (m, courtId, start) => {
     taken.push({ id: m.id, courtId, start });
-    players(m).forEach(p => busy.set(p, [...(busy.get(p) || []), { id: m.id, start }]));
+    players(m).forEach(({ p, maybe, cat }) => busy.set(p, [...(busy.get(p) || []), { id: m.id, start, maybe, cat }]));
   };
   const release = (m) => {
     for (let i = taken.length - 1; i >= 0; i--) if (taken[i].id === m.id) taken.splice(i, 1);
-    players(m).forEach(p => busy.set(p, (busy.get(p) || []).filter(b => b.id !== m.id)));
+    players(m).forEach(({ p }) => busy.set(p, (busy.get(p) || []).filter(b => b.id !== m.id)));
   };
   const courtFree = (courtId, start) => !taken.some(o => o.courtId === courtId && Math.abs(o.start - start) < durationMs);
-  const playersFree = (list, start) => list.every(p => (busy.get(p) || []).every(b => Math.abs(b.start - start) >= gapMs));
+  const playersFree = (list, start) => list.every(({ p, maybe, cat }) => (busy.get(p) || []).every(b =>
+    Math.abs(b.start - start) >= gapMs || (b.cat === cat && (b.maybe || maybe))));
 
   // Turnos disponibles por jornada
   const windows = daysConfig.map((day, i) => {
@@ -767,8 +783,9 @@ export function generateGlobalSchedule(allMatches, categories, config) {
     countDay(start, 1);
   });
 
+  // Un partido que ya tiene resultado pero no horario (se jugó antes de programar) no ocupa turno
   const toSchedule = allMatches
-    .filter(m => selected.has(m.category_id) && isSchedulable(m) && !isFixed(m))
+    .filter(m => selected.has(m.category_id) && isSchedulable(m) && !isFixed(m) && !(m.winner && !hasSchedule(m)))
     .map(m => ({ ...m }));
 
   // Modo cascada: los horarios vigentes quedan reservados mientras se revisan

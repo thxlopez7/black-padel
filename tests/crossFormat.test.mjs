@@ -207,3 +207,31 @@ test('edición manual: una pareja fijada a mano en el cuadro no la pisa la casca
   resolve(all);
   assert.notEqual(semi.p2_name, outsider);
 });
+
+test('horarios: un partido ya jugado sin horario no ocupa turno', () => {
+  const all = resolve(build(9));
+  const zone = of(all, 'ZONE').find(z => !z.is_bye);
+  play(zone, 2);
+  resolve(all);
+  const day = (date) => ({ date, startTime: '09:00', endTime: '23:59', phase: 'todas' });
+  const res = L.generateGlobalSchedule(all, [{ id: 'C', name: '7ma' }], {
+    daysConfig: [day('2026-11-06'), day('2026-11-07')], matchDurationMin: 60, courts: [{ id: 'c1' }, { id: 'c2' }], categoryIds: ['C']
+  });
+  assert.ok(!res.matches.some(m => m.id === zone.id));
+  assert.equal(res.unscheduled, 0);
+});
+
+test('horarios: las semis y finales sin definir de dos categorías con un jugador en común no se superponen', () => {
+  const a = withIds(L.generateAmericanoMatches('A', 4, ['Rolo & X1', 'X2 & X3', 'X4 & X5', 'X6 & X7'], false).generatedMatches);
+  const b = withIds(L.generateAmericanoMatches('B', 5, ['Rolo & Y1', 'Y2 & Y3', 'Y4 & Y5', 'Y6 & Y7', 'Y8 & Y9'], false).generatedMatches);
+  const res = L.generateGlobalSchedule([...a, ...b], [{ id: 'A', name: 'Suma 11' }, { id: 'B', name: 'Suma 9' }], {
+    daysConfig: [{ date: '2026-11-01', startTime: '10:00', endTime: '23:00', phase: 'todas' }], matchDurationMin: 60,
+    courts: [{ id: 'c1' }, { id: 'c2' }, { id: 'c3' }], categoryIds: ['A', 'B']
+  });
+  assert.equal(res.unscheduled, 0);
+  const t = (m) => new Date(`${m.match_date}T${m.match_time}:00`).getTime();
+  const playoffs = res.matches.filter(m => m.match_type !== 'AMERICANO');
+  for (const x of playoffs) for (const y of playoffs) {
+    if (x.category_id !== y.category_id) assert.ok(Math.abs(t(x) - t(y)) >= 3600000, `${x.round_name} (${x.category_id}) y ${y.round_name} (${y.category_id}) a la misma hora`);
+  }
+});
