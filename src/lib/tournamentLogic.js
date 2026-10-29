@@ -650,7 +650,17 @@ export function resolveCategoryMatches(catMatches) {
     // El 2º partido ya es eliminatorio: se llama como la ronda anterior a la primera del cuadro (Octavos antes de Cuartos)
     const crossRound = crossRoundName(bracket.filter(m => m.round_index === firstRound).length * 2);
     crosses.forEach((c, i) => setFields(c, { round_name: `${crossRound} ${ALPHABET[i]}` }));
-    crossPairings(zones).forEach(([p1, p2], i) => crosses[i] && assignPair(crosses[i], p1, p2));
+    // Un cruce fijado a mano conserva sus parejas, pero sus lugares "Zona B 1º" se completan con el resultado de esa zona
+    const fromZone = (n) => {
+      const z = n?.match(/^Zona ([A-Z]+) ([12])º$/);
+      return z ? zoneResult[`${z[2] === '1' ? 'W' : 'L'}${z[1]}`] ?? n : n;
+    };
+    crossPairings(zones).forEach(([p1, p2], i) => {
+      const c = crosses[i];
+      if (!c) return;
+      if (c.manual_pairs) setFields(c, { p1_name: fromZone(c.p1_name), p2_name: fromZone(c.p2_name) });
+      assignPair(c, p1, p2);
+    });
     const decided = crosses.every(c => c.winner);
     const seeds = decided ? crossQualifiers(zones, crosses).map(s => s.name) : [];
     const size = bracket.filter(m => m.round_index === firstRound).length * 2;

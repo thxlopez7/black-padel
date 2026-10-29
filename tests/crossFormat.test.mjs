@@ -375,3 +375,20 @@ test('baja de pareja: en tradicional su lugar pasa a BYE y el cuadro se recalcul
     assert.ok(m.is_wo && m.winner && m.winner !== 'D & 4');
   });
 });
+
+test('cruce fijado a mano: sus lugares de zona se completan al cargar la zona', () => {
+  const all = resolve(build(9));
+  const [octA, , octC] = of(all, 'CROSS');
+  const fernando = octA.p2_name, luis = octA.p1_name;
+  Object.assign(octA, { p1_name: fernando, p2_name: 'Zona B 1º', manual_pairs: true });
+  Object.assign(octC, { p1_name: luis, p2_name: 'Zona C 2º', manual_pairs: true });
+  resolve(all);
+  assert.deepEqual([octA.p1_name, octA.p2_name], [fernando, 'Zona B 1º']);
+  const zoneB = of(all, 'ZONE')[1], zoneC = of(all, 'ZONE')[2];
+  play(zoneB, 1); play(zoneC, 1);
+  resolve(all);
+  assert.deepEqual([octA.p1_name, octA.p2_name], [fernando, zoneB.p1_name]);
+  assert.deepEqual([octC.p1_name, octC.p2_name], [luis, zoneC.p2_name]);
+  playAll(all);
+  assert.ok(real(of(all, 'BRACKET').at(-1).winner));
+});
