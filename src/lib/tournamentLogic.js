@@ -829,11 +829,20 @@ export function generateGlobalSchedule(allMatches, categories, config) {
     [m.p1_name, m.p2_name].flatMap(playersOf).forEach(p => set.add(p));
     categoryPlayers.set(m.category_id, set);
   });
+  // Quién puede ocupar un lugar sin definir: "Zona B 1º" solo alguien de la Zona B; el resto, cualquiera de la categoría
+  const possible = (m, n) => {
+    const zone = n.match(/^Zona ([A-Z]+) [12]º$/);
+    if (zone) {
+      const z = allMatches.find(x => x.category_id === m.category_id && x.match_type === 'ZONE' && x.round_name === `ZONA ${zone[1]}`);
+      if (z) return [z.p1_name, z.p2_name].flatMap(playersOf);
+    }
+    return [...(categoryPlayers.get(m.category_id) || [])];
+  };
   const players = (m) => {
     const sides = [m.p1_name, m.p2_name];
     const known = sides.flatMap(playersOf);
-    const open = sides.some(n => n !== 'BYE' && isPlaceholder(n));
-    const all = open ? [...new Set([...known, ...(categoryPlayers.get(m.category_id) || [])])] : known;
+    const open = sides.filter(n => n && n !== 'BYE' && isPlaceholder(n));
+    const all = [...new Set([...known, ...open.flatMap(n => possible(m, n))])];
     return all.map(p => ({ p, maybe: !known.includes(p), cat: m.category_id }));
   };
   const claim = (m, courtId, start) => {
