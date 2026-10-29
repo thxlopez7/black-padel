@@ -638,6 +638,8 @@ export default function TournamentApp({ initialCategories }) {
   const [view, setView] = useState("home");   
   const [activeCatId, setActiveCatId] = useState(null);
   const [activeCourtId, setActiveCourtId] = useState(null);
+  // Cada pantalla nueva (cuadro, fixture, cancha, panel) empieza desde arriba
+  useEffect(() => { window.scrollTo(0, 0); }, [view, mode, activeCatId]);
   const [session, setSession] = useState(null);
   const [toast, setToast] = useState(null);
   const [promptConfig, setPromptConfig] = useState(null);
@@ -1452,6 +1454,8 @@ export default function TournamentApp({ initialCategories }) {
         {view === "court_schedule" && activeCourtId && (
           <CourtSchedule 
             court={courts.find(c => c.id === activeCourtId)}
+            courts={courts}
+            onSelectCourt={setActiveCourtId}
             matches={matches}
             categories={categories}
             onBack={() => setView(mode === "admin" ? "admin_home" : "home")}
