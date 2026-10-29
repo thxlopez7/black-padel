@@ -711,13 +711,16 @@ export function categoryLevel(name = '') {
  *   de partidos (day.maxMatches) para no cargar de más un día.
  *   Si una instancia no entra en sus jornadas, usa el primer turno libre de otra (summary.outOfPhase).
  * - Un cierre menor o igual al inicio (ej. 19:00 a 00:00) termina al día siguiente.
+ * - config.pinnedIds: partidos con horario pedido por el organizador; se respetan y el resto se acomoda
+ *   alrededor (las rondas siguientes de su categoría van después).
  * - config.keepExisting: conserva los horarios ya asignados que siguen siendo válidos y solo
  *   mueve lo necesario (partidos nuevos y los que quedan antes de la ronda previa: cascada).
  *
  * Devuelve { matches, changed, unscheduled, summary }.
  */
 export function generateGlobalSchedule(allMatches, categories, config) {
-  const { daysConfig = [], matchDurationMin, courts = [], categoryIds, restMin = 0, keepExisting = false } = config;
+  const { daysConfig = [], matchDurationMin, courts = [], categoryIds, restMin = 0, keepExisting = false, pinnedIds = [] } = config;
+  const pinned = new Set(pinnedIds);
   const duration = Number(matchDurationMin);
   const durationMs = duration * 60000;
   const restMs = Number(restMin) * 60000;
@@ -728,7 +731,7 @@ export function generateGlobalSchedule(allMatches, categories, config) {
   const getCatStrength = (catId) => categoryLevel(categories.find(c => c.id === catId)?.name);
 
   const hasSchedule = (m) => m.match_date && m.match_time && m.court_id;
-  const isFixed = (m) => hasSchedule(m) && (!selected.has(m.category_id) || (m.winner && isSchedulable(m)));
+  const isFixed = (m) => hasSchedule(m) && (!selected.has(m.category_id) || (m.winner && isSchedulable(m)) || pinned.has(m.id));
 
   // Turnos de cancha y agenda de cada jugador ya comprometidos (owner = id del partido)
   const taken = [];

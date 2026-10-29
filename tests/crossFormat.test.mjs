@@ -241,3 +241,18 @@ test('nivel de categorías: Suma 9 > Suma 11 > 7ma > Mix', () => {
   assert.deepEqual([...names].sort((a, b) => L.categoryLevel(a) - L.categoryLevel(b)), ['Suma 9 Caballeros', 'Suma 11 Caballeros', '7ma Caballero', 'Mix Black Padel']);
   assert.ok(L.categoryLevel('5ta Damas') < L.categoryLevel('7ma Caballero'));
 });
+
+test('horarios: un partido fijado se respeta y las rondas siguientes de su categoría van después', () => {
+  const all = resolve(build(6));
+  const zone = of(all, 'ZONE')[2];
+  Object.assign(zone, { match_date: '2026-11-07', match_time: '14:00', court_id: 'c1' });
+  const day = (date) => ({ date, startTime: '10:00', endTime: '23:00', phase: 'todas' });
+  const res = L.generateGlobalSchedule(all, [{ id: 'C', name: 'Mix' }], {
+    daysConfig: [day('2026-11-06'), day('2026-11-07')], matchDurationMin: 60, courts: [{ id: 'c1' }, { id: 'c2' }], categoryIds: ['C'], pinnedIds: [zone.id]
+  });
+  assert.ok(!res.matches.some(m => m.id === zone.id), 'el fijado no se reprograma');
+  const t = (m) => new Date(`${m.match_date}T${m.match_time}:00`).getTime();
+  const pinnedAt = t(zone);
+  res.matches.filter(m => m.match_type !== 'ZONE').forEach(m => assert.ok(t(m) >= pinnedAt + 3600000, `${m.round_name} después del partido fijado`));
+  assert.ok(!res.matches.some(m => m.court_id === 'c1' && t(m) === pinnedAt), 'su cancha queda reservada');
+});
