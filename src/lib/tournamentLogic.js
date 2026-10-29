@@ -1260,6 +1260,35 @@ function addZoneWithCross(catMatches, zones, oldBracket, name, categoryId, realP
 }
 
 /**
+ * Saca del torneo a una pareja dada de baja.
+ * - Tradicional: si todavía no jugó su partido de zona, su lugar pasa a BYE (el rival avanza sin jugar) y el
+ *   cuadro se recalcula. Si ya jugó, no se toca: hay que cargar W.O. en lo que le falte.
+ * - Americano: sus partidos sin jugar se dan por W.O. a favor del rival.
+ * Devuelve { updates: [{ matchId, updates }], notes } o { error }.
+ */
+export function removePairFromDraw(catMatches, pairName) {
+  const name = normalizePairName(pairName);
+  const own = (m) => [m.p1_name, m.p2_name].some(n => n && samePair(n, name));
+  const mine = catMatches.filter(own);
+  if (mine.length === 0) return { updates: [], notes: [] };
+  if (catMatches.some(m => m.match_type === 'AMERICANO')) {
+    const pending = mine.filter(m => m.match_type === 'AMERICANO' && !m.winner);
+    const updates = pending.map(m => ({ matchId: m.id, updates: { ...EMPTY_RESULT, winner: samePair(m.p1_name, name) ? m.p2_name : m.p1_name, is_wo: true } }));
+    const next = catMatches.map(m => ({ ...m, ...(updates.find(u => u.matchId === m.id)?.updates || {}) }));
+    return { updates: [...updates, ...resolveCategoryMatches(next)], notes: [`${pending.length} partidos sin jugar quedan por W.O. para sus rivales.`] };
+  }
+  const zone = mine.find(m => m.match_type === 'ZONE');
+  if (!zone) return { error: `${name} ya no está en una zona: cargá W.O. en los partidos que le falten.` };
+  if (zone.winner && !zone.is_bye) return { error: `${name} ya jugó su partido de zona: cargá W.O. en los partidos que le falten.` };
+  const side = samePair(zone.p1_name, name) ? 'p1_name' : 'p2_name';
+  const rival = side === 'p1_name' ? zone.p2_name : zone.p1_name;
+  // Sin partido de zona, ese turno de cancha queda libre
+  const zoneUpdate = { [side]: 'BYE', ...EMPTY_RESULT, is_bye: true, winner: rival === 'BYE' ? 'BYE' : rival, match_date: null, match_time: null, court_id: null };
+  const next = catMatches.map(m => (m.id === zone.id ? { ...m, ...zoneUpdate } : m));
+  return { updates: [{ matchId: zone.id, updates: zoneUpdate }, ...resolveCategoryMatches(next)], notes: [`En la ${zone.round_name} su lugar pasa a BYE.`] };
+}
+
+/**
  * Cambio de parejas en una zona del cuadro tradicional. Si una pareja elegida estaba en otra zona,
  * ocupa su lugar la pareja desplazada (intercambio), así nadie queda duplicado ni afuera.
  * Una pareja que sale de la zona a cambio de un pase libre pasa al pase libre de otra zona.

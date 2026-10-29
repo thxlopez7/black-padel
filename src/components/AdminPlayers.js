@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { addPlayer, deletePlayer, updatePlayer } from "../lib/supabaseService";
-import { normalizePairName, samePair } from "../lib/tournamentLogic";
+import { normalizePairName, samePair, removePairFromDraw } from "../lib/tournamentLogic";
 
 const labelOf = (p) => normalizePairName(`${p.name}${p.partner ? ' & ' + p.partner : ''}`);
 
@@ -14,7 +14,7 @@ const dayName = (date) => {
 // "Sáb 31/10 10:00–14:00"; una franja de 00:00 a 00:00 es el día completo
 const windowLabel = (w) => `${dayName(w.date)} ${w.from === '00:00' && w.to === '00:00' ? 'todo el día' : `${w.from}–${w.to}`}`;
 
-export default function AdminPlayers({ players, categories, matches = [], onBack, onPlayersUpdate, onPairRenamed, showToast }) {
+export default function AdminPlayers({ players, categories, matches = [], onBack, onPlayersUpdate, onPairRenamed, onPairRemoved, showToast }) {
   const [selectedCatId, setSelectedCatId] = useState("all");
   
   const [name1, setName1] = useState("");
@@ -97,18 +97,20 @@ export default function AdminPlayers({ players, categories, matches = [], onBack
 
   const handleDeletePlayer = async (id) => {
     const player = players.find(p => p.id === id);
-    const message = player && isInDraw(player)
-      ? "Ya está en el cuadro y seguirá ahí (cargá W.O. si se retira). ¿Eliminar?"
-      : "¿Eliminar esta pareja?";
-    if (confirm(message)) {
-      const success = await deletePlayer(id);
-      if (success) {
-        onPlayersUpdate({ id }, "delete");
-        showToast("Pareja eliminada.");
-      } else {
-        showToast("No se pudo eliminar la pareja.", "error");
-      }
+    const inDraw = player && isInDraw(player);
+    // Si está en el cuadro, se avisa qué pasa con sus partidos antes de borrar
+    let message = "¿Eliminar esta pareja?";
+    if (inDraw) {
+      const plan = removePairFromDraw(matches.filter(m => m.category_id === player.category_id), labelOf(player));
+      if (plan.error) return showToast(plan.error, "error");
+      message = `¿Eliminar ${labelOf(player)}? Sale del cuadro: ${plan.notes.join(' ')}`;
     }
+    if (!confirm(message)) return;
+    const success = await deletePlayer(id);
+    if (!success) return showToast("No se pudo eliminar la pareja.", "error");
+    onPlayersUpdate({ id }, "delete");
+    if (inDraw) await onPairRemoved(player.category_id, labelOf(player));
+    else showToast("Pareja eliminada.");
   };
 
   const filteredPlayers = selectedCatId === "all" 

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabase";
 import { getCategories, getCourts, getPlayers, getMatches, addCategory, deleteCategory, addCourt, deleteCourt, updateCategory, saveGeneratedMatches, deleteMatchesByCategory, deleteMatchesByIds, updateMatch, getSession, logoutAdmin } from "../lib/supabaseService";
-import { generateTournamentMatches, generateAmericanoMatches, resolveCategoryMatches, generateGlobalSchedule, addLatePair, swapZonePairs, renamePairInMatches, normalizePairName, samePair } from "../lib/tournamentLogic";
+import { generateTournamentMatches, generateAmericanoMatches, resolveCategoryMatches, generateGlobalSchedule, addLatePair, swapZonePairs, renamePairInMatches, removePairFromDraw, normalizePairName, samePair } from "../lib/tournamentLogic";
 import BracketView from "./BracketView";
 import AmericanoView from "./AmericanoView";
 import AdminPlayers from "./AdminPlayers";
@@ -736,6 +736,33 @@ export default function TournamentApp({ initialCategories }) {
   };
 
   // Suma una pareja inscripta tarde al torneo ya generado y reprograma en cascada
+  // Reacomoda en cascada los horarios de una categoría que cambió, sin mover lo que sigue siendo válido
+  const rescheduleCategory = async (categoryId) => {
+    let fresh = await getMatches();
+    const config = cascadeConfig(fresh, courts);
+    if (!config || !fresh.some(m => m.category_id === categoryId && m.match_date)) return { fresh, scheduleNote: '', missing: 0 };
+    const { changed, unscheduled } = generateGlobalSchedule(fresh, categories, { ...config, categoryIds: [categoryId], keepExisting: true, unavailable, featuredCourtId, maxConsecutive: MAX_CONSECUTIVE, multiCategoryRestMin: MULTI_CATEGORY_REST_MIN });
+    await Promise.all(changed.map(m => updateMatch(m.id, { match_date: m.match_date, match_time: m.match_time, court_id: m.court_id })));
+    if (changed.length) fresh = await getMatches();
+    const scheduleNote = changed.length || unscheduled ? ` Horarios ajustados: ${changed.length} ${changed.length === 1 ? 'partido' : 'partidos'}.${unscheduled ? ` ${unscheduled} sin lugar: agrega horarios en el gestor.` : ''}` : '';
+    return { fresh, scheduleNote, missing: unscheduled };
+  };
+
+  // Una pareja dada de baja sale del cuadro de su categoría (BYE en su zona o W.O. en el americano)
+  const handlePairRemoved = async (categoryId, pairName) => {
+    const plan = removePairFromDraw(matches.filter(m => m.category_id === categoryId), pairName);
+    if (plan.error) {
+      showToast(plan.error, "error");
+      return false;
+    }
+    const results = await Promise.all(plan.updates.map(u => updateMatch(u.matchId, u.updates)));
+    const { fresh, scheduleNote, missing } = await rescheduleCategory(categoryId);
+    setMatches(fresh);
+    const failed = results.some(r => !r);
+    showToast(failed ? "La pareja se eliminó, pero el cuadro no se actualizó del todo." : `${pairName} salió del cuadro. ${plan.notes.join(' ')}${scheduleNote}`, failed || missing ? "error" : "success");
+    return !failed;
+  };
+
   const handleAddLatePair = async (categoryId, pairName) => {
     const catMatches = matches.filter(m => m.category_id === categoryId);
     const plan = addLatePair(catMatches, pairName);
@@ -748,17 +775,7 @@ export default function TournamentApp({ initialCategories }) {
     const updatedCat = await updateCategory(categoryId, { num_pairs: plan.numPairs });
     if (updatedCat) setCategories(prev => prev.map(c => (c.id === categoryId ? { ...c, ...updatedCat } : c)));
 
-    let fresh = await getMatches();
-    let scheduleNote = '';
-    let missing = 0;
-    const config = cascadeConfig(fresh, courts);
-    if (config && fresh.some(m => m.category_id === categoryId && m.match_date)) {
-      const { changed, unscheduled } = generateGlobalSchedule(fresh, categories, { ...config, categoryIds: [categoryId], keepExisting: true, unavailable, featuredCourtId, maxConsecutive: MAX_CONSECUTIVE, multiCategoryRestMin: MULTI_CATEGORY_REST_MIN });
-      await Promise.all(changed.map(m => updateMatch(m.id, { match_date: m.match_date, match_time: m.match_time, court_id: m.court_id })));
-      fresh = await getMatches();
-      missing = unscheduled;
-      scheduleNote = ` Horarios ajustados: ${changed.length} ${changed.length === 1 ? 'partido' : 'partidos'}.${unscheduled ? ` ${unscheduled} sin lugar: agrega horarios en el gestor.` : ''}`;
-    }
+    const { fresh, scheduleNote, missing } = await rescheduleCategory(categoryId);
     setMatches(fresh);
     const failed = updated.some(r => !r);
     showToast(failed ? "La pareja se agregó, pero algunos cruces no se actualizaron." : `${pairName} agregada al torneo.${scheduleNote}`, failed || missing ? "error" : "success");
@@ -1364,6 +1381,7 @@ export default function TournamentApp({ initialCategories }) {
             showToast={showToast}
             matches={matches}
             onPairRenamed={handlePairRenamed}
+            onPairRemoved={handlePairRemoved}
           />
         )}
 

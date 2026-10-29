@@ -349,3 +349,29 @@ test('horarios: quien juega dos categorías descansa entre partidos', () => {
   const b1 = res.matches.filter(m => /B1/.test(m.p1_name + m.p2_name));
   assert.equal(b1.length, 3);
 });
+
+test('baja de pareja: en tradicional su lugar pasa a BYE y el cuadro se recalcula; en americano W.O.', () => {
+  const all = resolve(build(6));
+  const zoneC = of(all, 'ZONE')[2];
+  const gone = zoneC.p2_name, stays = zoneC.p1_name;
+  const res = L.removePairFromDraw(all, gone);
+  assert.ok(!res.error);
+  apply(all, res.updates);
+  resolve(all);
+  assert.equal(zoneC.p2_name, 'BYE');
+  assert.equal(zoneC.winner, stays);
+  assert.ok(!all.some(m => [m.p1_name, m.p2_name].includes(gone)), 'no queda en ningún partido');
+  playAll(all);
+  assert.ok(real(of(all, 'BRACKET').at(-1).winner), 'el torneo se puede terminar');
+  // Si ya jugó su zona, no se puede sacar
+  const played = resolve(build(6));
+  play(of(played, 'ZONE')[0], 1);
+  assert.ok(L.removePairFromDraw(played, of(played, 'ZONE')[0].p2_name).error);
+  // Americano
+  const am = withIds(L.generateAmericanoMatches('AM', 4, ['A & 1', 'B & 2', 'C & 3', 'D & 4'], false).generatedMatches);
+  const r2 = L.removePairFromDraw(am, 'D & 4');
+  apply(am, r2.updates);
+  am.filter(m => m.match_type === 'AMERICANO' && [m.p1_name, m.p2_name].includes('D & 4')).forEach(m => {
+    assert.ok(m.is_wo && m.winner && m.winner !== 'D & 4');
+  });
+});
