@@ -45,8 +45,9 @@ test('7ma con 9 parejas: un BYE en la zona, un BYE en el 2º partido y recién d
   assert.deepEqual(bracket.filter(m => m.round_index === 2).map(m => [m.p1_name, m.p2_name]),
     [['1º Clasificado', 'BYE'], ['4º Clasificado', '5º Clasificado'], ['2º Clasificado', 'BYE'], ['3º Clasificado', 'BYE']]);
   // Los lugares avanzan en cascada hasta la final
-  assert.deepEqual([bracket[4].p1_name, bracket[4].p2_name], ['1º Clasificado', '4º o 5º Clasificado']);
+  assert.deepEqual([bracket[4].p1_name, bracket[4].p2_name], ['1º Clasificado', 'Ganador Cuartos B']);
   assert.deepEqual([bracket[5].p1_name, bracket[5].p2_name], ['2º Clasificado', '3º Clasificado']);
+  assert.deepEqual([bracket[6].p1_name, bracket[6].p2_name], ['Ganador Semis A', 'Ganador Semis B']);
   assert.equal(bracket.at(-1).round_name, 'Final');
 
   zones.filter(z => !z.is_bye).forEach(z => play(z, 1));

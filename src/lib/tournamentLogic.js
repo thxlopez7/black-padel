@@ -476,7 +476,7 @@ export function calculateAmericanoStandings(pairsList, matches) {
   }));
 }
 
-export const isPlaceholder = (name) => !name || name === 'BYE' || /^Zona [A-Z]+ [12]º$/.test(name) || /^\d+º( o \d+º)? Clasificado$/.test(name) || name.includes('Tabla Americano') || name.startsWith('Ganador ');
+export const isPlaceholder = (name) => !name || name === 'BYE' || /^Zona [A-Z]+ [12]º$/.test(name) || /^\d+º Clasificado$/.test(name) || name.includes('Tabla Americano') || name.startsWith('Ganador ');
 
 /**
  * Determina el ganador de un partido a partir del marcador por sets.
@@ -614,16 +614,14 @@ export function resolveCategoryMatches(catMatches) {
     }
   }
 
-  // Quién sale de un partido del cuadro. Con dos partidos de zona, mientras no hay ganador se muestra quién puede
-  // llegar ("1º Clasificado" si su rival es BYE, "8º o 9º Clasificado" si se cruzan dos clasificados)
-  const seedOf = (name) => name?.match(/^(\d+)º Clasificado$/)?.[1];
+  // Quién sale de un partido del cuadro. Con dos partidos de zona, mientras no hay ganador:
+  // si el rival es BYE, el lugar pasa directo ("1º Clasificado"); si se juega, "Ganador Cuartos B"
   const advancing = (src) => {
     if (!src) return null;
     if (src.winner || crosses.length === 0) return src.winner || null;
-    if (src.p2_name === 'BYE' && isPlaceholder(src.p1_name) && src.p1_name !== 'BYE') return src.p1_name;
-    if (src.p1_name === 'BYE' && isPlaceholder(src.p2_name) && src.p2_name !== 'BYE') return src.p2_name;
-    const [a, b] = [seedOf(src.p1_name), seedOf(src.p2_name)];
-    return a && b ? `${a}º o ${b}º Clasificado` : null;
+    if (src.p2_name === 'BYE' && src.p1_name !== 'BYE') return src.p1_name || null;
+    if (src.p1_name === 'BYE' && src.p2_name !== 'BYE') return src.p2_name || null;
+    return src.p1_name === 'BYE' ? 'BYE' : `Ganador ${src.round_name}`;
   };
 
   if (zones.length > 0 && bracket.length > 0 && firstRoundPair) {
