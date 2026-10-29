@@ -1008,7 +1008,7 @@ export default function TournamentApp({ initialCategories }) {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto p-4 py-8 pb-24 md:pb-8">
+      <main className="max-w-7xl mx-auto p-4 py-8 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-8">
         
         {view === "admin_login" && (
           <AdminLogin 
@@ -1064,7 +1064,7 @@ export default function TournamentApp({ initialCategories }) {
             {/* Columna Derecha */}
             <div className="lg:col-span-4 bg-gray-900/80 backdrop-blur-md border border-gray-800 rounded-2xl p-6 shadow-xl flex flex-col h-full">
               <h2 className="text-xl font-light text-white mb-6 border-b border-gray-800 pb-3">Partidos <span className="font-bold text-red-500">por cancha</span></h2>
-              <div className="flex flex-col gap-3 flex-grow overflow-y-auto max-h-[600px] custom-scrollbar pr-2">
+              <div className="flex flex-col gap-3 flex-grow md:overflow-y-auto md:max-h-[600px] md:overscroll-contain custom-scrollbar pr-2">
                 {courts.length === 0 ? (
                   <p className="text-xs text-gray-500 italic text-center py-10">Los horarios por cancha se publicarán próximamente.</p>
                 ) : (
@@ -1259,7 +1259,7 @@ export default function TournamentApp({ initialCategories }) {
                       Nueva categoría
                     </button>
                   </div>
-                  <div className="flex flex-col gap-4 mb-4 overflow-y-auto max-h-[500px] custom-scrollbar pr-2">
+                  <div className="flex flex-col gap-4 mb-4 md:overflow-y-auto md:max-h-[500px] md:overscroll-contain custom-scrollbar pr-2">
                     {categories.length === 0 && <p className="text-gray-500 text-sm italic">No hay categorías creadas.</p>}
                     {categories.map(cat => (
                        <div key={cat.id} className="flex flex-col bg-gray-950 border border-gray-800 p-4 rounded-xl group hover:border-gray-700 transition-colors">
@@ -1304,7 +1304,7 @@ export default function TournamentApp({ initialCategories }) {
                       Nueva cancha
                     </button>
                   </div>
-                  <div className="flex flex-col gap-3 mb-4 overflow-y-auto max-h-[350px] custom-scrollbar pr-2">
+                  <div className="flex flex-col gap-3 mb-4 md:overflow-y-auto md:max-h-[350px] md:overscroll-contain custom-scrollbar pr-2">
                     {courts.length === 0 && <p className="text-gray-500 text-sm italic">No hay canchas registradas.</p>}
                     {courts.map(c => (
                        <div key={c.id} className="flex justify-between items-center bg-gray-950 border border-gray-800 p-4 rounded-xl group hover:border-gray-700 transition-colors">
@@ -1475,7 +1475,7 @@ export default function TournamentApp({ initialCategories }) {
       <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
 
       {mode === "public" && (
-        <div className="md:hidden fixed bottom-0 left-0 right-0 bg-black/95 backdrop-blur-md border-t border-gray-800 flex justify-around px-4 py-3 z-50">
+        <div className="md:hidden fixed bottom-0 left-0 right-0 bg-black/95 backdrop-blur-md border-t border-gray-800 flex justify-around px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] z-50">
            <button onClick={() => setView("home")} className={`flex flex-col items-center gap-1 transition-colors ${view === "home" ? "text-red-500" : "text-gray-500 hover:text-gray-300"}`}>
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
               <span className="text-[10px] font-bold uppercase tracking-widest">Torneo</span>

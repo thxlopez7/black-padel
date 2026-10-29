@@ -21,7 +21,7 @@ export default function CourtSchedule({ court, matches, categories, onBack }) {
           Partidos en <span className="font-bold text-red-500">{court.name}</span>
         </h2>
         
-        <div className="space-y-4 max-h-[600px] overflow-y-auto custom-scrollbar pr-2">
+        <div className="space-y-4 md:overflow-y-auto md:max-h-[600px] md:overscroll-contain custom-scrollbar pr-2">
           {courtMatches.length === 0 ? (
             <p className="text-sm text-gray-500 italic p-4 text-center border border-dashed border-gray-800 rounded-lg">No hay partidos programados en esta cancha.</p>
           ) : (

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Modal from "./Modal";
 
 export function PromptModal({ title, placeholder, onConfirm, onCancel }) {
   const [value, setValue] = useState("");
@@ -11,11 +12,7 @@ export function PromptModal({ title, placeholder, onConfirm, onCancel }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-fade-up">
-        <div className="p-6 border-b border-gray-800">
-          <h2 className="text-xl font-bold text-white">{title}</h2>
-        </div>
+    <Modal title={title} onClose={onCancel}>
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <input 
             type="text" 
@@ -34,8 +31,7 @@ export function PromptModal({ title, placeholder, onConfirm, onCancel }) {
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }
 

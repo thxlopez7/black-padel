@@ -57,7 +57,7 @@ export default function BracketView({ category, allMatches, courts, mode, onBack
         <span className="text-red-500 font-bold uppercase tracking-widest text-sm">{category.name}</span>
       </div>
       
-      <div className="bg-gray-900/60 border border-gray-800 rounded-xl flex-grow relative shadow-2xl overflow-x-auto custom-scrollbar" style={{ minHeight: 'calc(100vh - 180px)' }}>
+      <div className="bg-gray-900/60 border border-gray-800 rounded-xl flex-grow relative shadow-2xl overflow-x-auto overscroll-x-contain custom-scrollbar" style={{ minHeight: 'calc(100dvh - 180px)' }}>
         <div className="flex gap-12 p-8 items-center min-w-max">
           
           {/* ZONAS */}

@@ -182,7 +182,7 @@ export default function AdminPlayers({ players, categories, matches = [], onBack
               Mostrando: {selectedCatId === "all" ? "Todas las categorías" : categories.find(c=>c.id===selectedCatId)?.name}
             </h3>
             
-            <div className="space-y-3 overflow-y-auto max-h-[500px] custom-scrollbar pr-2">
+            <div className="space-y-3 md:overflow-y-auto md:max-h-[500px] md:overscroll-contain custom-scrollbar pr-2">
               {filteredPlayers.length === 0 ? (
                 <div className="text-sm text-gray-500 italic p-4 text-center border border-dashed border-gray-800 rounded-lg">No hay parejas inscriptas.</div>
               ) : (

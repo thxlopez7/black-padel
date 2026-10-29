@@ -2,7 +2,7 @@
 
 import { PairName } from "./UIComponents";
 import { useState, useMemo } from "react";
-import { createPortal } from "react-dom";
+import Modal from "./Modal";
 import { winnerFromScore, checkMatchEdit, isPlaceholder } from "../lib/tournamentLogic";
 
 // Lugares del cuadro que todavía no tienen pareja definida
@@ -117,20 +117,9 @@ export default function MatchEditorModal({ match, courts, allMatches = [], onClo
     </div>
   );
 
-  // Portal a <body>: los contenedores animados (transform) rompen el posicionamiento fixed
-  return createPortal(
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-fade-up">
-        <div className="flex justify-between items-center p-6 border-b border-gray-800 bg-gray-950">
-          <h3 className="text-lg font-bold text-red-500 uppercase tracking-wider">{match.round_name}</h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors" aria-label="Cerrar">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-6 space-y-5 max-h-[80vh] overflow-y-auto custom-scrollbar">
+  return (
+    <Modal title={match.round_name} onClose={onClose}>
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-[10px] text-gray-500 uppercase tracking-widest mb-1">Fecha</label>
@@ -221,8 +210,6 @@ export default function MatchEditorModal({ match, courts, allMatches = [], onClo
             ) : warnings.length > 0 && confirmedWarnings === warningsKey ? "Confirmar y guardar" : "Guardar"}
           </button>
         </form>
-      </div>
-    </div>,
-    document.body
+    </Modal>
   );
 }
