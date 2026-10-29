@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabase";
-import { getCategories, getCourts, getPlayers, getMatches, addCategory, deleteCategory, addCourt, deleteCourt, updateCategory, saveGeneratedMatches, deleteMatchesByCategory, updateMatch, getSession, logoutAdmin } from "../lib/supabaseService";
-import { generateTournamentMatches, generateAmericanoMatches, resolveCategoryMatches, generateGlobalSchedule, BRACKET_MAPS } from "../lib/tournamentLogic";
+import { getCategories, getCourts, getPlayers, getMatches, addCategory, deleteCategory, addCourt, deleteCourt, updateCategory, saveGeneratedMatches, deleteMatchesByCategory, deleteMatchesByIds, updateMatch, getSession, logoutAdmin } from "../lib/supabaseService";
+import { generateTournamentMatches, generateAmericanoMatches, resolveCategoryMatches, generateGlobalSchedule, addLatePair, swapZonePairs, renamePairInMatches, normalizePairName, samePair, BRACKET_MAPS } from "../lib/tournamentLogic";
 import BracketView from "./BracketView";
 import AmericanoView from "./AmericanoView";
 import AdminPlayers from "./AdminPlayers";
@@ -17,16 +17,68 @@ import { toLocalDateString, addDays, formatMatchSchedule } from "../lib/format";
 const MIN_AMERICANO_PAIRS = 3;
 const BRACKET_SIZES = Object.keys(BRACKET_MAPS).map(Number).sort((a, b) => a - b);
 
-const pairLabel = (p) => `${p.name}${p.partner ? ' & ' + p.partner : ''}`.trim();
+const pairLabel = (p) => normalizePairName(`${p.name}${p.partner ? ' & ' + p.partner : ''}`);
 // Menor tamaño de cuadro disponible que admite la cantidad de parejas
 const bracketSizeFor = (count) => BRACKET_SIZES.find(n => n >= count) || null;
 
+const toMinutesOf = (time) => { const [h, m] = String(time).split(':').map(Number); return h * 60 + m; };
+
+// Próximo día de la semana indicado (5 = viernes) a partir de hoy
+function nextWeekday(weekday) {
+  const today = new Date();
+  return toLocalDateString(new Date(today.getFullYear(), today.getMonth(), today.getDate() + ((weekday - today.getDay() + 7) % 7)));
+}
+
+// Viernes de noche y sábado completo para grupos; domingo para semifinales y finales
+const weekendTemplate = (friday) => [
+  { date: friday, startTime: '19:00', endTime: '00:00', phase: 'grupos', maxMatches: '' },
+  { date: addDays(friday, 1), startTime: '10:00', endTime: '00:00', phase: 'grupos', maxMatches: '' },
+  { date: addDays(friday, 2), startTime: '10:00', endTime: '19:00', phase: 'playoffs', maxMatches: '' }
+];
+
+// La última configuración aplicada se recuerda para reprogramar en cascada (parejas de último momento)
+const SCHEDULE_CONFIG_KEY = 'rd-schedule-config';
+function loadScheduleConfig() {
+  try {
+    return JSON.parse(localStorage.getItem(SCHEDULE_CONFIG_KEY)) || null;
+  } catch {
+    return null;
+  }
+}
+function saveScheduleConfig(config) {
+  try {
+    localStorage.setItem(SCHEDULE_CONFIG_KEY, JSON.stringify({ daysConfig: config.daysConfig, matchDurationMin: config.matchDurationMin, restMin: config.restMin, courtIds: config.courts.map(c => c.id) }));
+  } catch {
+    // sin almacenamiento local la cascada usa las jornadas ya programadas
+  }
+}
+
+// Jornadas a usar en la cascada: la última configuración o, si no hay, las fechas ya programadas
+function cascadeConfig(matches, courts) {
+  const saved = loadScheduleConfig();
+  if (saved?.daysConfig?.length) {
+    const ids = saved.courtIds?.filter(id => courts.some(c => c.id === id));
+    return { ...saved, courts: ids?.length ? courts.filter(c => ids.includes(c.id)) : courts };
+  }
+  const byDate = {};
+  matches.filter(m => m.match_date && m.match_time).forEach(m => {
+    const t = String(m.match_time).slice(0, 5);
+    const d = (byDate[m.match_date] ??= { date: m.match_date, startTime: t, last: t, phase: 'todas' });
+    if (t < d.startTime) d.startTime = t;
+    if (t > d.last) d.last = t;
+  });
+  const daysConfig = Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date)).map(({ last, ...d }) => {
+    const end = Math.min(toMinutesOf(last) + 120, 1440);
+    return { ...d, endTime: end >= 1440 ? '00:00' : `${String(Math.floor(end / 60)).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}` };
+  });
+  return daysConfig.length ? { daysConfig, matchDurationMin: 60, restMin: 0, courts } : null;
+}
+
 function AdminGlobalScheduleSetup({ matches, categories, courts, onBack, onGenerateGlobal }) {
-  const [daysConfig, setDaysConfig] = useState([
-    { date: toLocalDateString(), startTime: '09:00', endTime: '22:00', phase: 'grupos' }
-  ]);
-  const [matchDuration, setMatchDuration] = useState(60);
-  const [restMin, setRestMin] = useState(0);
+  const [saved] = useState(loadScheduleConfig);
+  const [daysConfig, setDaysConfig] = useState(() => saved?.daysConfig || weekendTemplate(nextWeekday(5)));
+  const [matchDuration, setMatchDuration] = useState(saved?.matchDurationMin || 60);
+  const [restMin, setRestMin] = useState(saved?.restMin || 0);
   const schedulableCategories = categories.filter(c => matches.some(m => m.category_id === c.id && !m.is_bye));
   const [selectedCats, setSelectedCats] = useState([]);
   const toggleCat = (id) => setSelectedCats(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
@@ -53,15 +105,14 @@ function AdminGlobalScheduleSetup({ matches, categories, courts, onBack, onGener
     setDaysConfig(daysConfig.map((day, i) => (i === index ? { ...day, [field]: value } : day)));
   };
 
-  const loadWeekendTemplate = () => {
-    const base = daysConfig[0]?.date || toLocalDateString();
-    setDaysConfig([
-      { date: base, startTime: '17:00', endTime: '23:45', phase: 'grupos' },
-      { date: addDays(base, 1), startTime: '17:00', endTime: '23:45', phase: 'grupos' },
-      { date: addDays(base, 2), startTime: '08:00', endTime: '23:45', phase: 'grupos' },
-      { date: addDays(base, 3), startTime: '09:00', endTime: '15:00', phase: 'semis' },
-      { date: addDays(base, 3), startTime: '16:00', endTime: '21:00', phase: 'finals' }
-    ]);
+  const loadWeekendTemplate = () => setDaysConfig(weekendTemplate(daysConfig[0]?.date || nextWeekday(5)));
+
+  // Turnos que ofrece cada jornada con las canchas seleccionadas
+  const dayCapacity = (day) => {
+    const from = toMinutesOf(day.startTime);
+    let to = toMinutesOf(day.endTime);
+    if (to <= from) to += 1440;
+    return Math.max(0, Math.floor((to - from) / Math.max(Number(matchDuration), 1))) * selectedCourts.length;
   };
 
   const activeMatches = matches.filter(m => !m.is_bye);
@@ -72,6 +123,7 @@ function AdminGlobalScheduleSetup({ matches, categories, courts, onBack, onGener
     const maxR = Math.max(...catMatches.map(m => m.round_index || 0));
     catMatches.forEach(m => {
        if (m.match_type === 'AMERICANO_FINAL') finalsCount++;
+       else if (m.match_type === 'AMERICANO_SEMI') semisCount++;
        else if (m.match_type === 'AMERICANO') gruposCount++;
        else if (m.match_type === 'ZONE') gruposCount++;
        else if (m.round_index === maxR && maxR > 0) finalsCount++;
@@ -95,8 +147,15 @@ function AdminGlobalScheduleSetup({ matches, categories, courts, onBack, onGener
         <h2 className="text-xl sm:text-2xl font-light text-white mb-6 border-b border-gray-800 pb-3">Gestor de <span className="font-bold text-red-500">horarios</span></h2>
         
         <div className="mb-6">
-           <label className="block text-gray-500 text-[10px] uppercase tracking-widest mb-2">Categorías a programar</label>
-           <p className="text-xs text-gray-500 mb-3">Solo se modifican los horarios de las categorías seleccionadas. Los turnos que ya usan las demás se respetan.</p>
+           <div className="flex items-center justify-between gap-2 mb-2">
+              <label className="block text-gray-500 text-[10px] uppercase tracking-widest">Categorías a programar</label>
+              {schedulableCategories.length > 1 && (
+                <button type="button" onClick={() => setSelectedCats(selectedCats.length === schedulableCategories.length ? [] : schedulableCategories.map(c => c.id))} className="text-[10px] uppercase font-bold text-red-400 hover:text-red-300">
+                  {selectedCats.length === schedulableCategories.length ? 'Quitar todas' : 'Seleccionar todas'}
+                </button>
+              )}
+            </div>
+           <p className="text-xs text-gray-500 mb-3">Las demás no se tocan.</p>
            <div className="flex flex-wrap gap-3">
              {schedulableCategories.length === 0 ? (
                <span className="text-xs text-gray-500">No hay categorías con partidos generados.</span>
@@ -140,7 +199,7 @@ function AdminGlobalScheduleSetup({ matches, categories, courts, onBack, onGener
              <label className="block text-gray-500 text-[10px] uppercase tracking-widest">Días de competencia y horarios</label>
              <div className="grid grid-cols-2 sm:flex gap-2">
                <button onClick={loadWeekendTemplate} className="bg-yellow-900/30 hover:bg-yellow-900/60 text-yellow-500 text-[10px] uppercase font-bold py-1 px-3 rounded border border-yellow-800 transition-colors">
-                 Plantilla de fin de semana (4 días)
+                 Plantilla viernes a domingo
                </button>
                <button onClick={addDay} className="bg-red-950/30 hover:bg-red-950/60 text-red-500 text-[10px] uppercase font-bold py-1 px-3 rounded border border-red-900 transition-colors">
                  Agregar día
@@ -150,17 +209,20 @@ function AdminGlobalScheduleSetup({ matches, categories, courts, onBack, onGener
            
            <div className="flex flex-col gap-3">
              {daysConfig.map((day, idx) => (
-               <div key={idx} className="flex flex-wrap md:flex-nowrap gap-3 items-end bg-gray-950 p-3 rounded-xl border border-gray-800">
-                 <div className="flex-1">
+               <div key={idx} className="bg-gray-950 p-3 rounded-xl border border-gray-800">
+               <div className="flex flex-wrap md:flex-nowrap gap-3 items-end">
+                 <div className="flex-1 min-w-[140px]">
                    <label className="block text-gray-600 text-[9px] uppercase tracking-widest mb-1">Fecha</label>
                    <input type="date" value={day.date} onChange={e => updateDay(idx, 'date', e.target.value)} className="w-full bg-gray-900 border border-gray-800 text-white rounded p-2 focus:border-red-600 outline-none text-sm" />
                  </div>
-                 <div className="flex-1">
-                   <label className="block text-gray-600 text-[9px] uppercase tracking-widest mb-1">Fase asignada</label>
+                 <div className="flex-1 min-w-[160px]">
+                   <label className="block text-gray-600 text-[9px] uppercase tracking-widest mb-1">Instancias</label>
                    <select value={day.phase} onChange={e => updateDay(idx, 'phase', e.target.value)} className="w-full bg-gray-900 border border-gray-800 text-white rounded p-2 focus:border-red-600 outline-none text-sm">
+                     <option value="todas">Todas las instancias</option>
                      <option value="grupos">Grupos y rondas previas</option>
-                     <option value="semis">Semifinales</option>
-                     <option value="finals">Finales</option>
+                     <option value="playoffs">Semifinales y finales</option>
+                     <option value="semis">Solo semifinales</option>
+                     <option value="finals">Solo finales</option>
                    </select>
                  </div>
                  <div className="w-auto">
@@ -205,6 +267,14 @@ function AdminGlobalScheduleSetup({ matches, categories, courts, onBack, onGener
                    </button>
                  )}
                </div>
+               <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3 text-[11px] text-gray-400">
+                 <label className="flex items-center gap-2">
+                   <span className="uppercase tracking-widest text-[9px] text-gray-600">Tope de partidos</span>
+                   <input type="number" min="0" inputMode="numeric" placeholder="Sin tope" value={day.maxMatches || ''} onChange={e => updateDay(idx, 'maxMatches', e.target.value ? Number(e.target.value) : '')} className="w-24 bg-gray-900 border border-gray-800 text-white rounded p-1.5 text-sm outline-none focus:border-red-600" />
+                 </label>
+                 <span>{dayCapacity(day)} turnos disponibles{day.endTime <= day.startTime ? ' · cierra al día siguiente' : ''}</span>
+               </div>
+               </div>
              ))}
            </div>
         </div>
@@ -243,7 +313,7 @@ function AdminGlobalScheduleSetup({ matches, categories, courts, onBack, onGener
         <button 
           disabled={selectedCats.length === 0}
           onClick={() => onGenerateGlobal({
-            daysConfig,
+            daysConfig: daysConfig.map(d => ({ ...d, maxMatches: Number(d.maxMatches) || null })),
             matchDurationMin: matchDuration,
             restMin,
             courts: courts.filter(c => selectedCourts.includes(c.id)),
@@ -253,12 +323,15 @@ function AdminGlobalScheduleSetup({ matches, categories, courts, onBack, onGener
         >
           {selectedCats.length === 0 ? 'Selecciona al menos una categoría' : `Programar ${selectedCats.length === 1 ? 'categoría seleccionada' : `${selectedCats.length} categorías`}`}
         </button>
+        <p className="text-[11px] text-gray-500 mt-3">
+          Lo jugado no se mueve.
+        </p>
       </div>
     </div>
   );
 }
 
-function AdminSetup({ category, players, onBack, onGenerate }) {
+function AdminSetup({ category, players, categoryMatches = [], onAddLatePair, onBack, onGenerate }) {
   // Parejas inscriptas en la base de datos, en orden de inscripción
   const registeredPairs = players
     .filter(p => p.category_id === category.id)
@@ -342,8 +415,18 @@ function AdminSetup({ category, players, onBack, onGenerate }) {
   const isGenerated = category.current_step === 'bracket' || category.current_step === 'americano';
   const isAmericanoActive = category.current_step === 'americano';
 
+  // Parejas inscriptas que todavía no forman parte del torneo generado
+  const inTournament = new Set(categoryMatches.flatMap(m => [m.p1_name, m.p2_name]).filter(Boolean).map(n => n.toLowerCase()));
+  const latePairs = isGenerated && categoryMatches.length > 0 ? registeredPairs.filter(p => !inTournament.has(p.toLowerCase())) : [];
+  const [addingPair, setAddingPair] = useState(null);
+  const addPair = async (pair) => {
+    setAddingPair(pair);
+    await onAddLatePair(pair);
+    setAddingPair(null);
+  };
+
   // Estimador de partidos para formato americano
-  const americanoMatchesCount = Math.floor((numPairs * (numPairs - 1)) / 2) + 1; // incluye la Gran Final
+  const americanoMatchesCount = Math.floor((numPairs * (numPairs - 1)) / 2) + (numPairs >= 4 ? 3 : 1); // incluye semifinales y final
   const americanoRoundsCount = numPairs % 2 === 0 ? numPairs - 1 : numPairs;
 
   return (
@@ -392,7 +475,7 @@ function AdminSetup({ category, players, onBack, onGenerate }) {
                   Modalidad americana: todos contra todos por puntos
                 </span>
                 <p className="text-xs text-gray-300 mt-1">
-                  Diseñado para pocas parejas. Todas juegan contra todas acumulando puntos (3 pts x victoria) y diferencia de games ganados.
+                  Todos contra todos. 3 puntos por victoria.
                 </p>
                 <div className="flex flex-wrap items-center gap-3 mt-2 text-[11px] text-gray-400 font-medium">
                   <span>Partidos totales: <strong className="text-white">{americanoMatchesCount}</strong></span>
@@ -411,7 +494,7 @@ function AdminSetup({ category, players, onBack, onGenerate }) {
             </div>
 
             <p className="mt-3 pt-3 border-t border-red-900/30 text-xs text-gray-300">
-              Al terminar todas las fechas, el 1º y el 2º de la tabla juegan la Gran Final. Su ganador es el campeón.
+              Después: semis (1º vs 2º, 3º vs 4º) y final.
             </p>
           </div>
         ) : (
@@ -422,7 +505,7 @@ function AdminSetup({ category, players, onBack, onGenerate }) {
                   Modalidad tradicional: zonas y cuadro eliminatorio
                 </span>
                 <p className="text-xs text-gray-400 mt-1">
-                  Fase de Zonas clasificatorias (1 partido por zona) y cuadro de eliminación directa (Cuartos, Semis, Final).
+                  Zonas y cuadro eliminatorio.
                 </p>
               </div>
               <div className="w-full sm:w-36 flex-shrink-0">
@@ -484,7 +567,7 @@ function AdminSetup({ category, players, onBack, onGenerate }) {
                      {isAmericanoActive ? "Ver tabla y partidos" : "Ver cuadro"}
                    </button>
                    <button onClick={() => {
-                     if(confirm('Se eliminará el torneo de esta categoría junto con todos sus resultados. Esta acción no se puede deshacer. ¿Continuar?')) {
+                     if(confirm('¿Eliminar el torneo y sus resultados? No se puede deshacer.')) {
                         onBack('delete_bracket');
                      }
                    }} className="bg-red-900/40 hover:bg-red-900/80 text-red-400 border border-red-900/50 text-xs py-1.5 px-3 rounded font-bold transition-colors">
@@ -495,6 +578,22 @@ function AdminSetup({ category, players, onBack, onGenerate }) {
             ) : (
               <div className="bg-gray-950 border border-gray-800 rounded p-3 mb-4">
                  <span className="text-gray-500 text-xs font-bold uppercase tracking-widest">Todavía no se generó el torneo de esta categoría.</span>
+              </div>
+            )}
+            {latePairs.length > 0 && (
+              <div className="bg-yellow-500/5 border border-yellow-700/50 rounded-lg p-4 mb-4">
+                <p className="text-yellow-200 text-xs font-bold uppercase tracking-widest mb-1">Parejas inscriptas fuera del torneo</p>
+                <p className="text-[11px] text-gray-400 mb-3">Cuadro y horarios se ajustan solos.</p>
+                <div className="flex flex-col gap-2">
+                  {latePairs.map(pair => (
+                    <div key={pair} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-gray-950 border border-gray-800 rounded p-2.5">
+                      <span className="text-sm text-gray-200 min-w-0 break-words">{pair}</span>
+                      <button type="button" disabled={addingPair !== null} onClick={() => addPair(pair)} className="shrink-0 bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white text-xs font-bold py-2 px-3 rounded uppercase tracking-wider">
+                        {addingPair === pair ? 'Agregando...' : 'Agregar al torneo'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -572,8 +671,8 @@ export default function TournamentApp({ initialCategories }) {
 
   // Valida, genera y persiste el fixture de una categoría. Devuelve un mensaje de error o null.
   const createTournament = async (categoryId, numPairs, pairs, isRandom, tournamentType, options = {}) => {
-    const named = pairs.map(p => p.trim()).filter(Boolean);
-    const duplicated = named.find((p, i) => named.findIndex(x => x.toLowerCase() === p.toLowerCase()) !== i);
+    const named = pairs.map(normalizePairName).filter(p => p && p.toUpperCase() !== 'BYE');
+    const duplicated = named.find((p, i) => named.findIndex(x => samePair(x, p)) !== i);
     if (duplicated) return `La pareja "${duplicated}" está repetida.`;
     if (tournamentType === 'americano' && named.length < MIN_AMERICANO_PAIRS) {
       return `El formato americano requiere al menos ${MIN_AMERICANO_PAIRS} parejas.`;
@@ -584,7 +683,7 @@ export default function TournamentApp({ initialCategories }) {
     try {
       generatedMatches = tournamentType === 'americano'
         ? generateAmericanoMatches(categoryId, numPairs, named, isRandom, options).generatedMatches
-        : generateTournamentMatches(categoryId, numPairs, pairs.map(p => p.trim() || 'BYE'), isRandom).generatedMatches;
+        : generateTournamentMatches(categoryId, numPairs, pairs.map(p => normalizePairName(p) || 'BYE'), isRandom).generatedMatches;
     } catch (err) {
       return err.message;
     }
@@ -602,7 +701,7 @@ export default function TournamentApp({ initialCategories }) {
   const handleGenerateTournament = async (numPairs, pairs, isRandom, tournamentType = 'traditional', options = {}) => {
     const cat = categories.find(c => c.id === activeCatId);
     const hasTournament = cat && (cat.current_step === 'bracket' || cat.current_step === 'americano');
-    if (hasTournament && !confirm("Esta categoría ya tiene un torneo generado. Se reemplazará y se perderán todos los resultados cargados. ¿Continuar?")) return;
+    if (hasTournament && !confirm("Ya hay un torneo. ¿Reemplazarlo y perder sus resultados?")) return;
 
     const error = await createTournament(activeCatId, numPairs, pairs, isRandom, tournamentType, options);
     if (error) return showToast(error, "error");
@@ -612,13 +711,42 @@ export default function TournamentApp({ initialCategories }) {
     setView("bracket");
   };
 
+  // Suma una pareja inscripta tarde al torneo ya generado y reprograma en cascada
+  const handleAddLatePair = async (categoryId, pairName) => {
+    const catMatches = matches.filter(m => m.category_id === categoryId);
+    const plan = addLatePair(catMatches, pairName);
+    if (plan.error) return showToast(plan.error, "error");
+    if (!confirm(`¿Agregar ${pairName}?\n\n${plan.notes.join('\n')}`)) return;
+
+    if (!(await deleteMatchesByIds(plan.deleteIds))) return showToast("No se pudo actualizar el cuadro.", "error");
+    if (plan.inserts.length > 0 && !(await saveGeneratedMatches(plan.inserts.map(m => ({ winner: null, is_wo: false, is_bye: false, p1_score: ['', '', ''], p2_score: ['', '', ''], ...m }))))) return showToast("No se pudieron guardar los partidos nuevos.", "error");
+    const updated = await Promise.all(plan.updates.map(u => updateMatch(u.matchId, u.updates)));
+    const updatedCat = await updateCategory(categoryId, { num_pairs: plan.numPairs });
+    if (updatedCat) setCategories(prev => prev.map(c => (c.id === categoryId ? { ...c, ...updatedCat } : c)));
+
+    let fresh = await getMatches();
+    let scheduleNote = '';
+    let missing = 0;
+    const config = cascadeConfig(fresh, courts);
+    if (config && fresh.some(m => m.category_id === categoryId && m.match_date)) {
+      const { changed, unscheduled } = generateGlobalSchedule(fresh, categories, { ...config, categoryIds: [categoryId], keepExisting: true });
+      await Promise.all(changed.map(m => updateMatch(m.id, { match_date: m.match_date, match_time: m.match_time, court_id: m.court_id })));
+      fresh = await getMatches();
+      missing = unscheduled;
+      scheduleNote = ` Horarios ajustados: ${changed.length} ${changed.length === 1 ? 'partido' : 'partidos'}.${unscheduled ? ` ${unscheduled} sin lugar: agrega horarios en el gestor.` : ''}`;
+    }
+    setMatches(fresh);
+    const failed = updated.some(r => !r);
+    showToast(failed ? "La pareja se agregó, pero algunos cruces no se actualizaron." : `${pairName} agregada al torneo.${scheduleNote}`, failed || missing ? "error" : "success");
+  };
+
   const handleGenerateGlobalSchedule = async (config) => {
     if (config.courts.length === 0) return showToast("Selecciona al menos una cancha.", "error");
     if (!(Number(config.matchDurationMin) > 0)) return showToast("La duración del partido debe ser mayor a 0.", "error");
     if (config.daysConfig.length === 0) return showToast("Agrega al menos un día de competencia.", "error");
-    const invalidDay = config.daysConfig.find(d => !d.date || d.endTime <= d.startTime);
-    if (invalidDay) return showToast("Cada día necesita fecha y un horario de cierre posterior al de inicio.", "error");
-    const { matches: scheduled, unscheduled, summary } = generateGlobalSchedule(matches, categories, config);
+    const invalidDay = config.daysConfig.find(d => !d.date || d.endTime === d.startTime);
+    if (invalidDay) return showToast("Cada día necesita fecha y horarios de inicio y cierre distintos.", "error");
+    const { matches: scheduled, changed, unscheduled, summary } = generateGlobalSchedule(matches, categories, config);
     if (scheduled.length === 0) return showToast("No hay partidos pendientes de programar en esas categorías.", "error");
 
     const lines = categories
@@ -628,14 +756,15 @@ export default function TournamentApp({ initialCategories }) {
         const range = info.first
           ? `${formatMatchSchedule({ match_date: info.first.date, match_time: info.first.time })} a ${formatMatchSchedule({ match_date: info.last.date, match_time: info.last.time })}`
           : 'sin turnos disponibles';
-        return `${c.name}: ${info.scheduled} partidos, ${range}${info.unscheduled ? `. Sin horario: ${info.unscheduled}` : ''}`;
+        return `${c.name}: ${info.scheduled} partidos, ${range}${info.outOfPhase ? `. ${info.outOfPhase} fuera de su jornada por falta de lugar` : ''}${info.unscheduled ? `. Sin horario: ${info.unscheduled}` : ''}`;
       });
     const warning = unscheduled > 0 ? `\n\nAtención: ${unscheduled === 1 ? 'un partido no entra' : `${unscheduled} partidos no entran`} en los días y horarios configurados.` : '';
-    if (!confirm(`Se asignarán estos horarios (los partidos ya jugados no se modifican):\n\n${lines.join('\n')}${warning}\n\n¿Aplicar?`)) return;
+    if (!confirm(`${lines.join('\n')}${warning}\n\n¿Aplicar horarios?`)) return;
 
     showToast("Guardando calendario...");
+    saveScheduleConfig(config);
     const results = await Promise.all(
-      scheduled.map(m => updateMatch(m.id, { match_date: m.match_date, match_time: m.match_time, court_id: m.court_id }))
+      changed.map(m => updateMatch(m.id, { match_date: m.match_date, match_time: m.match_time, court_id: m.court_id }))
     );
     const failed = results.filter(r => !r).length;
 
@@ -688,9 +817,9 @@ export default function TournamentApp({ initialCategories }) {
   const handleAutoPilot = async () => {
     const pending = categories.filter(c => !matches.some(m => m.category_id === c.id));
     if (pending.length === 0) {
-      return showToast("Todas las categorías ya tienen su torneo generado. Para rehacer uno, usa Configurar torneo en esa categoría.", "error");
+      return showToast("Todas las categorías ya tienen torneo.", "error");
     }
-    if (!confirm(`Se generará el torneo de: ${pending.map(c => c.name).join(', ')}. Con menos de 6 parejas se usa formato americano; con 6 o más, zonas y cuadro. ¿Continuar?`)) return;
+    if (!confirm(`¿Sortear ${pending.map(c => c.name).join(', ')}?`)) return;
 
     showToast("Generando sorteos...");
     const done = [];
@@ -728,13 +857,33 @@ export default function TournamentApp({ initialCategories }) {
 
   // Guarda el resultado de un partido y recalcula los cruces que dependen de él
   const handleMatchUpdate = async (match, updates) => {
+    let base = matches;
+    // Cambio de parejas en una zona: se intercambian con la zona de origen y se borran esos resultados
+    const zoneChanged = match.match_type === 'ZONE' && 'p1_name' in updates &&
+      (updates.p1_name !== match.p1_name || updates.p2_name !== match.p2_name);
+    if (zoneChanged) {
+      const swap = swapZonePairs(matches.filter(m => m.category_id === match.category_id), match.id, updates.p1_name, updates.p2_name);
+      if (swap.error) {
+        showToast(swap.error, "error");
+        return false;
+      }
+      const others = swap.changes.filter(c => c.matchId !== match.id);
+      const own = swap.changes.find(c => c.matchId === match.id).updates;
+      if ((await Promise.all(others.map(c => updateMatch(c.matchId, c.updates)))).some(r => !r)) {
+        showToast("No se pudieron actualizar las zonas.", "error");
+        return false;
+      }
+      const { p1_name: _p1, p2_name: _p2, winner: _w, p1_score: _s1, p2_score: _s2, is_wo: _wo, ...rest } = updates;
+      updates = { ...rest, ...own };
+      base = matches.map(m => ({ ...m, ...(others.find(c => c.matchId === m.id)?.updates || {}) }));
+    }
     const saved = await updateMatch(match.id, updates);
     if (!saved) {
       showToast("No se pudo guardar el partido.", "error");
       return false;
     }
 
-    let current = matches.map(m => (m.id === saved.id ? { ...m, ...saved } : m));
+    let current = base.map(m => (m.id === saved.id ? { ...m, ...saved } : m));
     const catMatches = current.filter(m => m.category_id === saved.category_id);
     const changes = resolveCategoryMatches(catMatches);
     const results = await Promise.all(changes.map(c => updateMatch(c.matchId, c.updates)));
@@ -747,6 +896,15 @@ export default function TournamentApp({ initialCategories }) {
     return true;
   };
 
+  // Una pareja renombrada después del sorteo se actualiza en los cruces de su categoría (solo esa)
+  const handlePairRenamed = async (categoryId, oldName, newName) => {
+    const changes = renamePairInMatches(matches, categoryId, oldName, newName);
+    if (changes.length === 0) return true;
+    const results = await Promise.all(changes.map(c => updateMatch(c.matchId, c.updates)));
+    setMatches(await getMatches());
+    return results.every(Boolean);
+  };
+
   const handlePlayersUpdate = (player, action) => {
     if (action === "add") setPlayers([...players, player]);
     if (action === "delete") setPlayers(players.filter(p => p.id !== player.id));
@@ -754,7 +912,7 @@ export default function TournamentApp({ initialCategories }) {
   };
 
   const handleDeleteCategory = async (id, name) => {
-    if (confirm(`Se eliminará la categoría "${name}" junto con sus parejas inscriptas y partidos. Esta acción no se puede deshacer. ¿Continuar?`)) {
+    if (confirm(`¿Eliminar "${name}" con sus parejas y partidos? No se puede deshacer.`)) {
       const success = await deleteCategory(id);
       if (success) {
         setCategories(categories.filter(c => c.id !== id));
@@ -1180,6 +1338,8 @@ export default function TournamentApp({ initialCategories }) {
             onBack={() => setView("admin_home")} 
             onPlayersUpdate={handlePlayersUpdate} 
             showToast={showToast}
+            matches={matches}
+            onPairRenamed={handlePairRenamed}
           />
         )}
 
@@ -1207,6 +1367,8 @@ export default function TournamentApp({ initialCategories }) {
           <AdminSetup 
             category={categories.find(c => c.id === activeCatId)} 
             players={players}
+            categoryMatches={matches.filter(m => m.category_id === activeCatId)}
+            onAddLatePair={(pair) => handleAddLatePair(activeCatId, pair)}
             onBack={async (action) => {
               if (action === 'view_bracket') {
                 setView('bracket');

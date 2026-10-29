@@ -125,13 +125,14 @@ function MatchCard({ match, courts, mode, onEdit }) {
   const courtName = courts.find(c => c.id === match.court_id)?.name || 'Sin cancha';
   const dateStr = formatMatchSchedule(match);
 
-  const isEditable = mode === 'admin' && match.p1_name && match.p2_name && !isByeMatch;
+  // En administración todos los partidos se abren (horario, cruce de zona o resultado), incluso los pases libres
+  const isEditable = mode === 'admin';
 
   return (
     <div 
       className={`bg-gray-950 border ${hasWinner ? 'border-gray-700' : 'border-gray-800'} rounded-lg my-4 relative z-10 overflow-hidden ${
         isEditable ? 'cursor-pointer hover:border-red-600 transition-all transform hover:-translate-y-1 duration-300 group' : ''
-      } ${isByeMatch ? 'opacity-50 grayscale hover:opacity-75 transition-opacity' : ''}`}
+      } ${isByeMatch ? 'opacity-75 hover:opacity-100 transition-opacity' : ''}`}
       onClick={() => isEditable && onEdit(match)}
     >
       {/* Glow de fondo si tiene ganador */}
@@ -144,7 +145,7 @@ function MatchCard({ match, courts, mode, onEdit }) {
           {hasWinner && <svg className="w-3 h-3 text-red-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>}
           {match.round_name}
         </span>
-        {isEditable && <span className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] text-red-100">Cargar resultado</span>}
+        {isEditable && <span className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] text-red-100">{isByeMatch || !match.p1_name || !match.p2_name ? 'Editar' : 'Cargar resultado'}</span>}
       </div>
 
       <div className={p1Classes}>

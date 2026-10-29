@@ -4,6 +4,9 @@ import { PairName } from "./UIComponents";
 import { useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { winnerFromScore, checkMatchEdit } from "../lib/tournamentLogic";
+
+// Lugares del cuadro que todavía no tienen pareja definida
+const isPlaceholderName = (n) => !n || n === 'BYE' || /^Zona [A-Z]+ [12]º$/.test(n) || n.includes('Tabla Americano') || n.startsWith('Ganador ');
 import { formatTime } from "../lib/format";
 
 const EMPTY_SCORE = ['', '', ''];
@@ -23,14 +26,20 @@ export default function MatchEditorModal({ match, courts, allMatches = [], onClo
   const [p2Name, setP2Name] = useState(match.p2_name);
   const [confirmedWarnings, setConfirmedWarnings] = useState('');
 
-  // En el americano, los cruces de partidos sin jugar se pueden modificar
-  const canEditPairs = match.match_type === 'AMERICANO' && !match.winner;
-  const categoryPairs = useMemo(() => [...new Set(
-    allMatches
-      .filter(m => m.category_id === match.category_id && m.match_type === 'AMERICANO')
-      .flatMap(m => [m.p1_name, m.p2_name])
-      .filter(Boolean)
-  )].sort(), [allMatches, match.category_id]);
+  // Cruces modificables: fechas del americano sin jugar y zonas del tradicional (con pase libre)
+  const isZone = match.match_type === 'ZONE';
+  const canEditPairs = (match.match_type === 'AMERICANO' && !match.winner) || isZone;
+  const categoryPairs = useMemo(() => {
+    const names = [...new Set(
+      allMatches
+        .filter(m => m.category_id === match.category_id && m.match_type === match.match_type)
+        .flatMap(m => [m.p1_name, m.p2_name])
+        .filter(n => n && n !== 'BYE')
+    )].sort();
+    return isZone ? [...names, 'BYE'] : names;
+  }, [allMatches, match.category_id, match.match_type, isZone]);
+  // El resultado solo se carga cuando ambos lados son parejas reales
+  const canScore = !isPlaceholderName(p1Name) && !isPlaceholderName(p2Name);
 
   const edit = {
     p1_name: p1Name,
@@ -53,8 +62,8 @@ export default function MatchEditorModal({ match, courts, allMatches = [], onClo
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (isWo && !woWinner) return setError('Selecciona la pareja ganadora por W.O.');
-    if (!isWo && scoreResult.error) return setError(scoreResult.error);
+    if (canScore && isWo && !woWinner) return setError('Selecciona la pareja ganadora por W.O.');
+    if (canScore && !isWo && scoreResult.error) return setError(scoreResult.error);
     if (errors.length > 0) return setError(errors[0]);
     if (warnings.length > 0 && confirmedWarnings !== warningsKey) {
       setConfirmedWarnings(warningsKey);
@@ -62,6 +71,12 @@ export default function MatchEditorModal({ match, courts, allMatches = [], onClo
     }
 
     setLoading(true);
+    if (!canScore) {
+      // Pase libre o cruce por definir: solo cambia horario y, en zonas, las parejas
+      await onSave(edit);
+      setLoading(false);
+      return;
+    }
     await onSave({
       ...edit,
       is_wo: isWo,
@@ -125,14 +140,22 @@ export default function MatchEditorModal({ match, courts, allMatches = [], onClo
           {canEditPairs && (
             <div className="bg-gray-950 border border-gray-800 rounded-lg p-4 space-y-2">
               <label className="block text-[10px] text-gray-500 uppercase tracking-widest">Cruce</label>
+              {isZone && <p className="text-[11px] text-gray-400">Elegí otra pareja y se intercambian.</p>}
               {[[p1Name, setP1Name], [p2Name, setP2Name]].map(([value, setter], i) => (
-                <select key={i} value={value} onChange={e => { setter(e.target.value); setError(''); }} className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-xs text-white focus:border-red-600 outline-none">
-                  {categoryPairs.map(p => <option key={p} value={p}>{p}</option>)}
+                <select key={i} value={value || ""} onChange={e => { setter(e.target.value); setError(''); }} className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-xs text-white focus:border-red-600 outline-none">
+                  {categoryPairs.map(p => <option key={p} value={p}>{p === 'BYE' ? 'Pase libre (BYE)' : p}</option>)}
                 </select>
               ))}
             </div>
           )}
 
+          {!canScore ? (
+            <p className="bg-gray-950 border border-gray-800 rounded-lg p-4 text-xs text-gray-400">
+              {[p1Name, p2Name].includes('BYE')
+                ? 'Pase libre: avanza sin jugar.'
+                : 'Esperando resultados anteriores.'}
+            </p>
+          ) : (<>
           <div className="bg-gray-950 border border-gray-800 rounded-lg p-4 space-y-3">
             <div className="grid grid-cols-[1fr_40px_40px_40px] gap-2 text-[10px] text-gray-500 uppercase tracking-widest text-center">
               <div className="text-left">Pareja</div><div>S1</div><div>S2</div><div>S3</div>
@@ -158,6 +181,7 @@ export default function MatchEditorModal({ match, courts, allMatches = [], onClo
               </p>
             )}
           </div>
+          </>)}
 
           {(errors.length > 0 || warnings.length > 0) && (
             <div className={`rounded p-3 text-xs space-y-1 border ${errors.length > 0 ? 'bg-red-500/10 border-red-500/50 text-red-300' : 'bg-yellow-500/10 border-yellow-600/50 text-yellow-200'}`}>

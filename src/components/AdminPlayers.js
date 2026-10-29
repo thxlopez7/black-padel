@@ -2,8 +2,11 @@
 
 import { useState } from "react";
 import { addPlayer, deletePlayer, updatePlayer } from "../lib/supabaseService";
+import { normalizePairName, samePair } from "../lib/tournamentLogic";
 
-export default function AdminPlayers({ players, categories, onBack, onPlayersUpdate, showToast }) {
+const labelOf = (p) => normalizePairName(`${p.name}${p.partner ? ' & ' + p.partner : ''}`);
+
+export default function AdminPlayers({ players, categories, matches = [], onBack, onPlayersUpdate, onPairRenamed, showToast }) {
   const [selectedCatId, setSelectedCatId] = useState("all");
   
   const [name1, setName1] = useState("");
@@ -19,20 +22,23 @@ export default function AdminPlayers({ players, categories, onBack, onPlayersUpd
   };
 
   const handleSavePlayer = async () => {
-    const player1 = name1.trim();
-    const player2 = name2.trim();
+    const player1 = normalizePairName(name1).replace(/&/g, '').trim();
+    const player2 = normalizePairName(name2).replace(/&/g, '').trim();
     if (!player1) return showToast("Ingresa el nombre del jugador 1.", "error");
 
     const targetCat = categoryId || (selectedCatId !== "all" ? selectedCatId : null);
     if (!targetCat) return showToast("Selecciona una categoría.", "error");
 
-    const label = `${player1}${player2 ? ' & ' + player2 : ''}`.toLowerCase();
-    const duplicated = players.some(p =>
-      p.id !== editingId &&
-      p.category_id === targetCat &&
-      `${p.name}${p.partner ? ' & ' + p.partner : ''}`.trim().toLowerCase() === label
-    );
-    if (duplicated) return showToast("Esa pareja ya está inscripta en la categoría.", "error");
+    const label = labelOf({ name: player1, partner: player2 });
+    const duplicated = players.some(p => p.id !== editingId && p.category_id === targetCat && samePair(labelOf(p), label));
+    if (duplicated) return showToast("Esa pareja ya está en la categoría.", "error");
+    if (label.toUpperCase() === 'BYE') return showToast("Nombre no válido.", "error");
+
+    const original = editingId ? players.find(p => p.id === editingId) : null;
+    const inDraw = original && isInDraw(original);
+    if (inDraw && original.category_id !== targetCat) {
+      return showToast("Ya juega en el cuadro de su categoría. No se puede mover.", "error");
+    }
 
     const playerData = {
       name: player1,
@@ -41,12 +47,15 @@ export default function AdminPlayers({ players, categories, onBack, onPlayersUpd
     };
     const targetCategory = categories.find(c => c.id === targetCat);
     const drawDone = targetCategory && ['bracket', 'americano'].includes(targetCategory.current_step);
-    const drawNotice = drawDone ? " El sorteo de esta categoría ya se realizó: regenéralo para incluir los cambios." : "";
+    const drawNotice = drawDone && !inDraw ? " Sumala al cuadro desde Configurar torneo." : "";
 
     if (editingId) {
       const updated = await updatePlayer(editingId, playerData);
       if (!updated) return showToast("No se pudo actualizar la pareja.", "error");
       onPlayersUpdate(updated, "update");
+      if (inDraw && !samePair(labelOf(original), label) && !(await onPairRenamed(targetCat, labelOf(original), label))) {
+        return showToast("Se guardó, pero el cuadro no se pudo actualizar.", "error");
+      }
       resetForm();
       showToast("Pareja actualizada." + drawNotice);
     } else {
@@ -65,8 +74,15 @@ export default function AdminPlayers({ players, categories, onBack, onPlayersUpd
     setCategoryId(p.category_id || "");
   };
 
+  // ¿La pareja ya figura en el cuadro de su categoría?
+  const isInDraw = (p) => matches.some(m => m.category_id === p.category_id && [m.p1_name, m.p2_name].some(n => n && samePair(n, labelOf(p))));
+
   const handleDeletePlayer = async (id) => {
-    if (confirm("Se eliminará esta pareja. ¿Continuar?")) {
+    const player = players.find(p => p.id === id);
+    const message = player && isInDraw(player)
+      ? "Ya está en el cuadro y seguirá ahí (cargá W.O. si se retira). ¿Eliminar?"
+      : "¿Eliminar esta pareja?";
+    if (confirm(message)) {
       const success = await deletePlayer(id);
       if (success) {
         onPlayersUpdate({ id }, "delete");

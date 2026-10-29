@@ -31,16 +31,30 @@ za.winner='B'; apply(X, L.resolveCategoryMatches(X));
 assert.ok(X.some(m=>m.match_type==='BRACKET'&&m.p1_name==='B'));
 assert.ok(!X.some(m=>m.match_type==='BRACKET'&&(m.p1_name==='A'&&m.round_index===1&&m.match_index===0)));
 
-// Americano final only after all matches played
-const am = withIds(L.generateAmericanoMatches('Z',4,['A','B','C','D'],false,{withFinal:true}).generatedMatches,'Z');
+// Americano: semifinales 1º-2º y 3º-4º al terminar las fechas, final entre ganadores
+const am = withIds(L.generateAmericanoMatches('Z',5,['A','B','C','D','E'],false).generatedMatches,'Z');
 const reg = am.filter(m=>m.match_type==='AMERICANO');
+const semisOf = () => am.filter(m=>m.match_type==='AMERICANO_SEMI');
+assert.equal(semisOf().length, 2);
 reg[0].winner = reg[0].p1_name; apply(am, L.resolveCategoryMatches(am));
-assert.equal(am.find(m=>m.match_type==='AMERICANO_FINAL').p1_name,'1º Tabla Americano');
+assert.equal(semisOf()[0].p1_name,'1º Tabla Americano');
 reg.forEach(m=>{ m.winner=m.p1_name; m.p1_score=['6','6','']; m.p2_score=['2','2','']; });
 apply(am, L.resolveCategoryMatches(am));
+const st = L.calculateAmericanoStandings(['A','B','C','D','E'], reg);
+const s1 = am.find(m=>m.round_name==='Semifinal 1'), s2 = am.find(m=>m.round_name==='Semifinal 2');
+assert.deepEqual([s1.p1_name,s1.p2_name],[st[0].name,st[1].name]);
+assert.deepEqual([s2.p1_name,s2.p2_name],[st[2].name,st[3].name]);
 const fin = am.find(m=>m.match_type==='AMERICANO_FINAL');
-const st = L.calculateAmericanoStandings(['A','B','C','D'], reg);
-assert.equal(fin.p1_name, st[0].name); assert.equal(fin.p2_name, st[1].name);
+assert.equal(fin.p1_name,'Ganador Semifinal 1');
+Object.assign(s1,{winner:s1.p2_name,p1_score:['3','4',''],p2_score:['6','6','']});
+Object.assign(s2,{winner:s2.p1_name,p1_score:['6','6',''],p2_score:['1','1','']});
+apply(am, L.resolveCategoryMatches(am));
+assert.deepEqual([fin.p1_name,fin.p2_name],[st[1].name,st[2].name]);
+assert.ok(fin.round_index > s1.round_index);
+// Con 3 parejas no hay semifinales: final directa
+const am3 = L.generateAmericanoMatches('Y',3,['A','B','C'],false).generatedMatches;
+assert.equal(am3.filter(m=>m.match_type==='AMERICANO_SEMI').length,0);
+assert.equal(am3.find(m=>m.match_type==='AMERICANO_FINAL').p1_name,'1º Tabla Americano');
 
 // Scheduler: no pair double-booked, rounds ordered
 const all = [...am.filter(m=>m.match_type==='AMERICANO').map(m=>({...m,winner:null})), ...X];
@@ -73,7 +87,6 @@ assert.equal(all[0].match_time, undefined, 'input not mutated');
     } else {
       for (let r=1;r<=3;r++){ const prevEnd=Math.max(...sch.filter(m=>m.round_index===r-1).map(t))+3600000; assert.ok(sch.filter(m=>m.round_index===r).every(m=>t(m)>=prevEnd),'round order '+r); }
     }
-    console.log(catId, 'scheduled', sch.length, 'last', sch.map(m=>m.match_time).sort().pop());
   }
 }
 
@@ -92,12 +105,12 @@ assert.equal(all[0].match_time, undefined, 'input not mutated');
   const B = withIds(L.generateAmericanoMatches('CB',4,['Juan & Sofi','Tomi & Nico','Eva & Flor','Gabi & Hana'],false).generatedMatches,'CB');
   const fixedOther = [{id:'f1',category_id:'CX',match_type:'AMERICANO',p1_name:'Juan & Zoe',p2_name:'X & Y',match_date:'2026-11-01',match_time:'09:00:00',court_id:'c3',round_index:0}];
   const cats=[{id:'CA',name:'5ta'},{id:'CB',name:'Mixto'},{id:'CX',name:'Otra'}];
-  const r = L.generateGlobalSchedule([...A,...B,...fixedOther], cats, {daysConfig:[day()],matchDurationMin:60,courts,categoryIds:['CA','CB'],restMin:30});
+  const r = L.generateGlobalSchedule([...A,...B,...fixedOther], cats, {daysConfig:[day('todas','08:00','02:00')],matchDurationMin:60,courts,categoryIds:['CA','CB'],restMin:30});
   assert.equal(r.unscheduled,0);
   const juan = [...r.matches,...fixedOther].filter(m=>/Juan/.test(m.p1_name+m.p2_name)).map(t).sort((x,y)=>x-y);
   for (let i=1;i<juan.length;i++) assert.ok(juan[i]-juan[i-1] >= 90*60000, 'Juan descanso 30 min entre partidos');
   assert.ok(!r.matches.some(m=>m.court_id==='c3'&&t(m)===t(fixedOther[0])),'turno fijo respetado');
-  assert.ok(r.summary.CA.scheduled===7 && r.summary.CB.scheduled===7, 'resumen por categoría');
+  assert.ok(r.summary.CA.scheduled===9 && r.summary.CB.scheduled===9, 'resumen por categoría');
 
   // Partidos ya jugados conservan su horario
   const C = withIds(L.generateAmericanoMatches('CC',4,['a & b','c & d','e & f','g & h'],false).generatedMatches,'CC');

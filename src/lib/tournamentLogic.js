@@ -1,5 +1,17 @@
 export const POINTS_PER_WIN = 3;
 
+// Semifinales del americano: posiciones de la tabla que se cruzan
+export const AMERICANO_SEMIS = [
+  { name: 'Semifinal 1', seeds: [1, 2] },
+  { name: 'Semifinal 2', seeds: [3, 4] }
+];
+const AMERICANO_PLAYOFF = ['AMERICANO_SEMI', 'AMERICANO_FINAL'];
+
+// Nombre de pareja canónico: espacios simples y " & " entre jugadores ("ana&  bea" -> "ana & bea")
+export const normalizePairName = (name) =>
+  String(name || '').replace(/\s*&\s*/g, ' & ').replace(/\s+/g, ' ').trim();
+export const samePair = (a, b) => normalizePairName(a).toLowerCase() === normalizePairName(b).toLowerCase();
+
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 export const BRACKET_MAPS = {
@@ -188,23 +200,21 @@ export function generateAmericanoMatches(categoryId, numPairs, pairsList, isRand
     current = [fixed, last, ...rest];
   }
 
-  // Si se solicita Gran Final entre 1º y 2º de la tabla
-  // La Gran Final entre el 1º y el 2º forma parte del formato (puede desactivarse con withFinal: false)
+  // Fase final: con 4 o más parejas, semifinales 1º vs 2º y 3º vs 4º y final entre los ganadores;
+  // con 3 parejas, final directa 1º vs 2º (puede desactivarse con withFinal: false)
   if (options.withFinal !== false) {
-    generatedMatches.push({
-      category_id: categoryId,
-      match_type: 'AMERICANO_FINAL',
-      round_name: 'Gran Final (1º vs 2º)',
-      round_index: totalRounds,
-      match_index: matchCounter++,
-      p1_name: '1º Tabla Americano',
-      p2_name: '2º Tabla Americano',
-      winner: null,
-      is_wo: false,
-      is_bye: false,
-      p1_score: ['', '', ''],
-      p2_score: ['', '', '']
+    const playoff = (type, round, name, p1, p2) => generatedMatches.push({
+      category_id: categoryId, match_type: type, round_name: name, round_index: round,
+      match_index: matchCounter++, p1_name: p1, p2_name: p2, winner: null, is_wo: false, is_bye: false,
+      p1_score: ['', '', ''], p2_score: ['', '', '']
     });
+    if (pairs.length >= 4) {
+      playoff('AMERICANO_SEMI', totalRounds, AMERICANO_SEMIS[0].name, '1º Tabla Americano', '2º Tabla Americano');
+      playoff('AMERICANO_SEMI', totalRounds, AMERICANO_SEMIS[1].name, '3º Tabla Americano', '4º Tabla Americano');
+      playoff('AMERICANO_FINAL', totalRounds + 1, 'Final', `Ganador ${AMERICANO_SEMIS[0].name}`, `Ganador ${AMERICANO_SEMIS[1].name}`);
+    } else {
+      playoff('AMERICANO_FINAL', totalRounds, 'Final', '1º Tabla Americano', '2º Tabla Americano');
+    }
   }
 
   return { pairs, generatedMatches };
@@ -333,7 +343,7 @@ export function calculateAmericanoStandings(pairsList, matches) {
   }));
 }
 
-const isPlaceholder = (name) => !name || name === 'BYE' || /^Zona [A-Z]+ [12]º$/.test(name) || name.includes('Tabla Americano');
+const isPlaceholder = (name) => !name || name === 'BYE' || /^Zona [A-Z]+ [12]º$/.test(name) || name.includes('Tabla Americano') || name.startsWith('Ganador ');
 
 /**
  * Determina el ganador de un partido a partir del marcador por sets.
@@ -366,11 +376,16 @@ const EMPTY_RESULT = { winner: null, is_wo: false, p1_score: ['', '', ''], p2_sc
 /**
  * Recalcula de forma determinística los cruces derivados de una categoría:
  * - Tradicional: nombres del cuadro a partir de las zonas y rondas previas, BYE automáticos.
- * - Americano: finalistas de la Gran Final una vez disputada toda la fase de grupos.
+ * - Americano: semifinalistas (1º-2º y 3º-4º) al terminar las fechas y finalistas al cerrarse las semis.
  * Si los participantes de un partido cambian, su resultado anterior se invalida.
  * Devuelve la lista de { matchId, updates } con los cambios necesarios.
  */
 export function resolveCategoryMatches(catMatches) {
+  // Cada categoría se resuelve por separado: nunca se mezclan cruces entre categorías
+  const categoryIds = [...new Set(catMatches.map(m => m.category_id))];
+  if (categoryIds.length > 1) {
+    return categoryIds.flatMap(id => resolveCategoryMatches(catMatches.filter(m => m.category_id === id)));
+  }
   const byId = new Map(catMatches.map(m => [m.id, { ...m }]));
   const updates = new Map();
   const setFields = (m, fields) => {
@@ -382,38 +397,50 @@ export function resolveCategoryMatches(catMatches) {
     Object.assign(m, changed);
     updates.set(m.id, { ...(updates.get(m.id) || {}), ...changed });
   };
+  // Pase libre: si un lado es BYE, avanza el otro (cuando ya se conoce) sin resultado cargado
+  const applyBye = (m, p1, p2) => {
+    const hasBye = p1 === 'BYE' || p2 === 'BYE';
+    if (Boolean(m.is_bye) !== hasBye) setFields(m, { is_bye: hasBye });
+    if (!hasBye) return false;
+    const other = p1 === 'BYE' ? p2 : p1;
+    const winner = other === 'BYE' ? 'BYE' : isPlaceholder(other) ? null : other;
+    setFields(m, { ...EMPTY_RESULT, winner });
+    return true;
+  };
   const assignPair = (m, p1, p2) => {
     const participantsChanged = m.p1_name !== p1 || m.p2_name !== p2;
     setFields(m, { p1_name: p1, p2_name: p2 });
-    let winner = m.winner;
-    if (p1 === 'BYE' && p2 === 'BYE') winner = 'BYE';
-    else if (p2 === 'BYE' && !isPlaceholder(p1)) winner = p1;
-    else if (p1 === 'BYE' && !isPlaceholder(p2)) winner = p2;
-    else if (participantsChanged || (winner && winner !== p1 && winner !== p2)) {
-      setFields(m, EMPTY_RESULT);
-      return;
-    }
-    if (winner !== m.winner) setFields(m, { winner });
+    if (applyBye(m, p1, p2)) return;
+    if (participantsChanged || (m.winner && m.winner !== p1 && m.winner !== p2)) setFields(m, EMPTY_RESULT);
   };
 
   const all = [...byId.values()];
 
-  // --- Americano: Gran Final ---
+  // --- Americano: semifinales y final ---
   const finalMatch = all.find(m => m.match_type === 'AMERICANO_FINAL');
   if (finalMatch) {
     const regular = all.filter(m => m.match_type === 'AMERICANO' && !m.is_bye);
     const allPlayed = regular.length > 0 && regular.every(m => m.winner);
-    let p1 = '1º Tabla Americano', p2 = '2º Tabla Americano';
-    if (allPlayed) {
-      const names = [...new Set(regular.flatMap(m => [m.p1_name, m.p2_name]))];
-      const standings = calculateAmericanoStandings(names, regular);
-      if (standings.length >= 2) { p1 = standings[0].name; p2 = standings[1].name; }
+    const standings = allPlayed ? calculateAmericanoStandings([...new Set(regular.flatMap(m => [m.p1_name, m.p2_name]))], regular) : [];
+    const seed = (pos) => standings[pos - 1]?.name || `${pos}º Tabla Americano`;
+    const semis = all.filter(m => m.match_type === 'AMERICANO_SEMI');
+    if (semis.length > 0) {
+      AMERICANO_SEMIS.forEach(({ name, seeds }) => {
+        const semi = semis.find(m => m.round_name === name);
+        if (semi) assignPair(semi, seed(seeds[0]), seed(seeds[1]));
+      });
+      const winnerOf = (name) => semis.find(m => m.round_name === name)?.winner || `Ganador ${name}`;
+      assignPair(finalMatch, winnerOf(AMERICANO_SEMIS[0].name), winnerOf(AMERICANO_SEMIS[1].name));
+    } else {
+      assignPair(finalMatch, seed(1), seed(2));
     }
-    assignPair(finalMatch, p1, p2);
   }
 
   // --- Tradicional: Zonas -> Cuadro ---
   const zones = all.filter(m => m.match_type === 'ZONE').sort((a, b) => a.match_index - b.match_index);
+  zones.forEach(z => {
+    if (!applyBye(z, z.p1_name, z.p2_name) && z.winner && z.winner !== z.p1_name && z.winner !== z.p2_name) setFields(z, EMPTY_RESULT);
+  });
   const bracket = all.filter(m => m.match_type === 'BRACKET');
   const template = BRACKET_MAPS[zones.length * 2];
   if (zones.length > 0 && bracket.length > 0 && template) {
@@ -457,7 +484,8 @@ function resolveGenerated(matches) {
   const withIds = matches.map((m, i) => ({ ...m, id: `tmp-${i}` }));
   const changes = resolveCategoryMatches(withIds);
   changes.forEach(({ matchId, updates }) => Object.assign(withIds.find(m => m.id === matchId), updates));
-  return withIds.map(({ id: _id, ...rest }) => rest);
+  // Todas las filas con las mismas columnas: en una inserción múltiple, las faltantes quedarían en null
+  return withIds.map(({ id: _id, ...rest }) => ({ ...EMPTY_RESULT, is_bye: false, ...rest }));
 }
 
 const toMinutes = (time) => {
@@ -465,10 +493,27 @@ const toMinutes = (time) => {
   return h * 60 + m;
 };
 const slotStart = (date, time) => new Date(`${date}T${String(time).slice(0, 5)}:00`).getTime();
+const pad2 = (n) => String(n).padStart(2, '0');
+const nextDate = (date) => {
+  const [y, m, d] = date.split('-').map(Number);
+  const dt = new Date(y, m - 1, d + 1);
+  return `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}`;
+};
 
 // Jugadores individuales de una pareja ("Ana & Bea" -> ["ana", "bea"]); los marcadores de posición no cuentan
 const playersOf = (pairName) =>
   isPlaceholder(pairName) ? [] : pairName.split('&').map(n => n.trim().toLowerCase()).filter(Boolean);
+
+// Instancias que admite cada tipo de jornada
+export const DAY_PHASES = {
+  todas: ['grupos', 'semis', 'finals'],
+  grupos: ['grupos'],
+  playoffs: ['semis', 'finals'],
+  semis: ['semis'],
+  finals: ['finals']
+};
+
+const isSchedulable = (m) => !m.is_bye && m.p1_name !== 'BYE' && m.p2_name !== 'BYE';
 
 /**
  * Programador de horarios.
@@ -479,18 +524,25 @@ const playersOf = (pairName) =>
  * - Un jugador nunca tiene dos partidos superpuestos, aunque esté inscripto en varias categorías,
  *   y entre sus partidos se respeta el descanso mínimo (config.restMin).
  * - Tradicional: cada ronda empieza cuando terminó la anterior (zonas -> cuadro -> final).
- * - Americano: las fechas se ordenan cronológicamente y la Gran Final va después de todas.
+ * - Americano: las fechas se ordenan cronológicamente y las semifinales y la final van después de todas.
  * - Las categorías más fuertes (número menor en el nombre) quedan en los horarios más tardíos.
- * - Los días marcados como "semis" o "finales" se reservan para esas instancias.
+ * - Cada jornada admite ciertas instancias (day.phase, ver DAY_PHASES) y puede tener un tope
+ *   de partidos (day.maxMatches) para no cargar de más un día.
+ *   Si una instancia no entra en sus jornadas, usa el primer turno libre de otra (summary.outOfPhase).
+ * - Un cierre menor o igual al inicio (ej. 19:00 a 00:00) termina al día siguiente.
+ * - config.keepExisting: conserva los horarios ya asignados que siguen siendo válidos y solo
+ *   mueve lo necesario (partidos nuevos y los que quedan antes de la ronda previa: cascada).
  *
- * Devuelve { matches, unscheduled, summary } con los partidos reprogramados de esas categorías.
+ * Devuelve { matches, changed, unscheduled, summary }.
  */
 export function generateGlobalSchedule(allMatches, categories, config) {
-  const { daysConfig = [], matchDurationMin, courts = [], categoryIds, restMin = 0 } = config;
+  const { daysConfig = [], matchDurationMin, courts = [], categoryIds, restMin = 0, keepExisting = false } = config;
   const duration = Number(matchDurationMin);
   const durationMs = duration * 60000;
-  const gapMs = durationMs + Number(restMin) * 60000;
+  const restMs = Number(restMin) * 60000;
+  const gapMs = durationMs + restMs;
   const selected = new Set(categoryIds || categories.map(c => c.id));
+  const courtIndex = (id) => courts.findIndex(c => c.id === id);
 
   const getCatStrength = (catId) => {
     const num = categories.find(c => c.id === catId)?.name.match(/(\d+)/);
@@ -498,32 +550,68 @@ export function generateGlobalSchedule(allMatches, categories, config) {
   };
 
   const hasSchedule = (m) => m.match_date && m.match_time && m.court_id;
-  const isFixed = (m) => hasSchedule(m) && (!selected.has(m.category_id) || (m.winner && !m.is_bye));
+  const isFixed = (m) => hasSchedule(m) && (!selected.has(m.category_id) || (m.winner && isSchedulable(m)));
 
-  // Turnos de cancha y agenda de cada jugador ya comprometidos
-  const fixed = allMatches.filter(isFixed);
-  const occupied = fixed.map(m => ({ courtId: m.court_id, start: slotStart(m.match_date, m.match_time) }));
+  // Turnos de cancha y agenda de cada jugador ya comprometidos (owner = id del partido)
+  const taken = [];
   const busy = new Map();
-  const addBusy = (m, start) => [m.p1_name, m.p2_name].flatMap(playersOf).forEach(p => busy.set(p, [...(busy.get(p) || []), start]));
-  fixed.forEach(m => addBusy(m, slotStart(m.match_date, m.match_time)));
-  const isPlayerFree = (players, start) => players.every(p => (busy.get(p) || []).every(t => Math.abs(t - start) >= gapMs));
+  const players = (m) => [m.p1_name, m.p2_name].flatMap(playersOf);
+  const claim = (m, courtId, start) => {
+    taken.push({ id: m.id, courtId, start });
+    players(m).forEach(p => busy.set(p, [...(busy.get(p) || []), { id: m.id, start }]));
+  };
+  const release = (m) => {
+    for (let i = taken.length - 1; i >= 0; i--) if (taken[i].id === m.id) taken.splice(i, 1);
+    players(m).forEach(p => busy.set(p, (busy.get(p) || []).filter(b => b.id !== m.id)));
+  };
+  const courtFree = (courtId, start) => !taken.some(o => o.courtId === courtId && Math.abs(o.start - start) < durationMs);
+  const playersFree = (list, start) => list.every(p => (busy.get(p) || []).every(b => Math.abs(b.start - start) >= gapMs));
 
-  const pools = { grupos: [], semis: [], finals: [] };
-  for (const day of daysConfig) {
-    for (let t = toMinutes(day.startTime); t + duration <= toMinutes(day.endTime); t += duration) {
-      const time = `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+  // Turnos disponibles por jornada
+  const windows = daysConfig.map((day, i) => {
+    const from = toMinutes(day.startTime);
+    let to = toMinutes(day.endTime);
+    if (to <= from) to += 1440;
+    return { i, start: slotStart(day.date, day.startTime), end: slotStart(day.date, day.startTime) + (to - from) * 60000, from, to, day };
+  });
+  const dayOf = (start) => windows.find(w => start >= w.start && start < w.end)?.i ?? -1;
+  const dayCount = new Map();
+  const countDay = (start, delta) => {
+    const i = dayOf(start);
+    if (i !== -1) dayCount.set(i, (dayCount.get(i) || 0) + delta);
+  };
+
+  const slots = [];
+  for (const w of windows) {
+    for (let t = w.from; t + duration <= w.to; t += duration) {
+      const date = t >= 1440 ? nextDate(w.day.date) : w.day.date;
+      const time = `${pad2(Math.floor((t % 1440) / 60))}:${pad2(t % 60)}`;
       for (const court of courts) {
-        const start = slotStart(day.date, time);
-        if (occupied.some(o => o.courtId === court.id && Math.abs(o.start - start) < durationMs)) continue;
-        (pools[day.phase] || pools.grupos).push({ date: day.date, time, courtId: court.id, start });
+        slots.push({ date, time, courtId: court.id, start: slotStart(date, time), dayIdx: w.i, phases: DAY_PHASES[w.day.phase] || DAY_PHASES.todas });
       }
     }
   }
-  Object.values(pools).forEach(pool => pool.sort((a, b) => a.start - b.start));
+  slots.sort((a, b) => a.start - b.start || courtIndex(a.courtId) - courtIndex(b.courtId));
+
+  const fixed = allMatches.filter(isFixed);
+  fixed.forEach(m => {
+    const start = slotStart(m.match_date, m.match_time);
+    claim(m, m.court_id, start);
+    countDay(start, 1);
+  });
 
   const toSchedule = allMatches
-    .filter(m => selected.has(m.category_id) && !m.is_bye && !isFixed(m))
+    .filter(m => selected.has(m.category_id) && isSchedulable(m) && !isFixed(m))
     .map(m => ({ ...m }));
+
+  // Modo cascada: los horarios vigentes quedan reservados mientras se revisan
+  if (keepExisting) {
+    toSchedule.filter(hasSchedule).forEach(m => {
+      const start = slotStart(m.match_date, m.match_time);
+      claim(m, m.court_id, start);
+      countDay(start, 1);
+    });
+  }
 
   const catMaxRound = {};
   allMatches.forEach(m => {
@@ -531,12 +619,14 @@ export function generateGlobalSchedule(allMatches, categories, config) {
   });
   const getPhase = (m) => {
     if (m.match_type === 'AMERICANO_FINAL') return 'finals';
+    if (m.match_type === 'AMERICANO_SEMI') return 'semis';
     if (m.match_type !== 'BRACKET') return 'grupos';
     const max = catMaxRound[m.category_id];
     if (m.round_index === max) return 'finals';
     if (m.round_index === max - 1 && max > 1) return 'semis';
     return 'grupos';
   };
+  const phaseHasDays = (phase) => slots.some(s => s.phases.includes(phase));
 
   // Fin de cada ronda por categoría (incluye partidos ya jugados) para encadenar el cuadro y la final
   const roundEnd = new Map();
@@ -546,11 +636,11 @@ export function generateGlobalSchedule(allMatches, categories, config) {
   };
   fixed.filter(m => selected.has(m.category_id)).forEach(m => markRoundEnd(m, slotStart(m.match_date, m.match_time)));
   const earliestStart = (m) => {
-    if (m.match_type !== 'BRACKET' && m.match_type !== 'AMERICANO_FINAL') return 0;
+    if (m.match_type !== 'BRACKET' && !AMERICANO_PLAYOFF.includes(m.match_type)) return 0;
     let min = 0;
     for (const [key, end] of roundEnd) {
       const [catId, round] = key.split('::');
-      if (catId === m.category_id && Number(round) < m.round_index) min = Math.max(min, end);
+      if (catId === m.category_id && Number(round) < m.round_index) min = Math.max(min, end + restMs);
     }
     return min;
   };
@@ -562,30 +652,274 @@ export function generateGlobalSchedule(allMatches, categories, config) {
   );
 
   const summary = {};
-  for (const m of ordered) {
-    const info = (summary[m.category_id] ??= { scheduled: 0, unscheduled: 0, first: null, last: null });
-    const phase = getPhase(m);
-    const pool = pools[phase].length > 0 ? pools[phase] : pools.grupos;
-    const minStart = earliestStart(m);
-    const players = [m.p1_name, m.p2_name].flatMap(playersOf);
-    const idx = pool.findIndex(s => s.start >= minStart && isPlayerFree(players, s.start));
-
-    if (idx === -1) {
-      Object.assign(m, { match_date: null, match_time: null, court_id: null });
-      info.unscheduled++;
-      continue;
-    }
-    const [slot] = pool.splice(idx, 1);
-    Object.assign(m, { match_date: slot.date, match_time: slot.time, court_id: slot.courtId });
-    addBusy(m, slot.start);
-    markRoundEnd(m, slot.start);
-    info.scheduled++;
+  const changed = [];
+  const track = (info, slot) => {
     if (!info.first || slot.start < info.first.start) info.first = slot;
     if (!info.last || slot.start > info.last.start) info.last = slot;
+  };
+  for (const m of ordered) {
+    const info = (summary[m.category_id] ??= { scheduled: 0, unscheduled: 0, moved: 0, outOfPhase: 0, first: null, last: null });
+    const minStart = earliestStart(m);
+    const list = players(m);
+    const before = hasSchedule(m) ? `${m.match_date}|${String(m.match_time).slice(0, 5)}|${m.court_id}` : null;
+
+    if (keepExisting && hasSchedule(m)) {
+      const start = slotStart(m.match_date, m.match_time);
+      release(m);
+      if (start >= minStart && courtFree(m.court_id, start) && playersFree(list, start)) {
+        claim(m, m.court_id, start);
+        markRoundEnd(m, start);
+        info.scheduled++;
+        track(info, { date: m.match_date, time: String(m.match_time).slice(0, 5), start });
+        continue;
+      }
+      countDay(start, -1);
+    }
+
+    const phase = getPhase(m);
+    const strictPhase = phaseHasDays(phase);
+    const fits = (s, anyPhase) =>
+      s.start >= minStart &&
+      (anyPhase || !strictPhase || s.phases.includes(phase)) &&
+      (!(Number(daysConfig[s.dayIdx].maxMatches) > 0) || (dayCount.get(s.dayIdx) || 0) < Number(daysConfig[s.dayIdx].maxMatches)) &&
+      courtFree(s.courtId, s.start) &&
+      playersFree(list, s.start);
+    // Si en las jornadas de su instancia no hay lugar, se usa el primer turno libre de cualquier jornada
+    let slot = slots.find(s => fits(s, false));
+    if (!slot && strictPhase) {
+      slot = slots.find(s => fits(s, true));
+      if (slot) info.outOfPhase++;
+    }
+
+    if (!slot) {
+      Object.assign(m, { match_date: null, match_time: null, court_id: null });
+      info.unscheduled++;
+      if (before) changed.push(m);
+      continue;
+    }
+    Object.assign(m, { match_date: slot.date, match_time: slot.time, court_id: slot.courtId });
+    claim(m, slot.courtId, slot.start);
+    countDay(slot.start, 1);
+    markRoundEnd(m, slot.start);
+    info.scheduled++;
+    if (before) info.moved++;
+    track(info, slot);
+    if (before !== `${slot.date}|${slot.time}|${slot.courtId}`) changed.push(m);
   }
 
   const unscheduled = Object.values(summary).reduce((n, i) => n + i.unscheduled, 0);
-  return { matches: ordered, unscheduled, summary };
+  // Si conservar los horarios deja partidos afuera, se reprograma la categoría completa cuando eso entra mejor
+  if (keepExisting && unscheduled > 0) {
+    const full = generateGlobalSchedule(allMatches, categories, { ...config, keepExisting: false });
+    if (full.unscheduled < unscheduled) return full;
+  }
+  return { matches: ordered, changed, unscheduled, summary };
+}
+
+/**
+ * Incorpora una pareja de último momento a un torneo ya generado, sin rehacer lo jugado.
+ * - Americano: se agregan sus cruces contra todas las parejas, usando primero las fechas en las
+ *   que una pareja descansa; la fase final se corre detrás.
+ * - Tradicional: ocupa una zona con pase libre (BYE). Si no hay, se agrega una zona y el cuadro
+ *   se reconstruye al tamaño siguiente conservando zonas y resultados.
+ * Devuelve { inserts, updates, deleteIds, numPairs, notes } o { error }.
+ */
+export function addLatePair(catMatches, pairName) {
+  const name = normalizePairName(pairName);
+  if (!name) return { error: 'La pareja no tiene nombre.' };
+  if (catMatches.length === 0) return { error: 'La categoría todavía no tiene torneo generado.' };
+  const categoryId = catMatches[0].category_id;
+  catMatches = catMatches.filter(m => m.category_id === categoryId);
+  const already = catMatches.some(m => [m.p1_name, m.p2_name].some(p => p && samePair(p, name)));
+  if (already) return { error: `${name} ya forma parte del torneo.` };
+
+  const isAmericano = catMatches.some(m => m.match_type === 'AMERICANO');
+  return isAmericano ? addToAmericano(catMatches, name, categoryId) : addToTraditional(catMatches, name, categoryId);
+}
+
+function addToAmericano(catMatches, name, categoryId) {
+  const regular = catMatches.filter(m => m.match_type === 'AMERICANO');
+  const playoff = catMatches.filter(m => AMERICANO_PLAYOFF.includes(m.match_type));
+  const pairs = [...new Set(regular.flatMap(m => [m.p1_name, m.p2_name]))];
+  const rounds = new Map();
+  regular.forEach(m => {
+    if (!rounds.has(m.round_index)) rounds.set(m.round_index, new Set());
+    rounds.get(m.round_index).add(m.p1_name).add(m.p2_name);
+  });
+  let maxRound = Math.max(...regular.map(m => m.round_index));
+  let matchIndex = Math.max(...catMatches.map(m => m.match_index || 0)) + 1;
+  const newRoundBusy = new Map();
+  const inserts = [];
+
+  // Fechas ordenadas: primero aquellas en las que la pareja rival descansa
+  for (const rival of pairs) {
+    let round = [...rounds.keys()].sort((a, b) => a - b)
+      .find(r => !rounds.get(r).has(rival) && !rounds.get(r).has(name));
+    if (round === undefined) {
+      round = [...newRoundBusy.keys()].find(r => !newRoundBusy.get(r).has(rival));
+      if (round === undefined) {
+        round = ++maxRound;
+        newRoundBusy.set(round, new Set());
+      }
+      newRoundBusy.get(round).add(rival);
+    } else {
+      rounds.get(round).add(rival).add(name);
+    }
+    inserts.push({
+      category_id: categoryId,
+      match_type: 'AMERICANO',
+      round_name: `Fecha ${round + 1}`,
+      round_index: round,
+      match_index: matchIndex++,
+      p1_name: rival,
+      p2_name: name,
+      winner: null,
+      is_wo: false,
+      is_bye: false,
+      p1_score: ['', '', ''],
+      p2_score: ['', '', '']
+    });
+  }
+
+  const notes = [`Juega ${inserts.length} partidos nuevos.`];
+  // La fase final se corre detrás de las fechas nuevas y vuelve a esperar la tabla completa
+  const firstPlayoffRound = Math.min(...playoff.map(m => m.round_index));
+  const after = [...catMatches.filter(m => m.match_type === 'AMERICANO'), ...inserts];
+  const next = catMatches.map(m => (AMERICANO_PLAYOFF.includes(m.match_type) ? { ...m, round_index: maxRound + 1 + (m.round_index - firstPlayoffRound) } : m));
+  const shifted = next.filter(m => AMERICANO_PLAYOFF.includes(m.match_type));
+  const cascade = resolveCategoryMatches([...shifted, ...after.map((m, i) => ({ ...m, id: m.id || `new-${i}` }))]);
+  const updates = shifted.map(m => {
+    const original = catMatches.find(x => x.id === m.id);
+    const u = { ...(cascade.find(c => c.matchId === m.id)?.updates || {}) };
+    if (m.round_index !== original.round_index) u.round_index = m.round_index;
+    return { matchId: m.id, updates: u };
+  }).filter(u => Object.keys(u.updates).length > 0);
+  if (playoff.some(m => m.winner)) notes.push('Semis y final vuelven a quedar pendientes.');
+  return { inserts, updates, deleteIds: [], numPairs: pairs.length + 1, notes };
+}
+
+function addToTraditional(catMatches, name, categoryId) {
+  const zones = catMatches.filter(m => m.match_type === 'ZONE').sort((a, b) => a.match_index - b.match_index);
+  const oldBracket = catMatches.filter(m => m.match_type === 'BRACKET');
+  const realPairs = zones.flatMap(z => [z.p1_name, z.p2_name]).filter(p => p && p !== 'BYE').length;
+
+  // 1) Zona con pase libre disponible
+  const byeZone = zones.find(z => (z.p1_name === 'BYE') !== (z.p2_name === 'BYE')) || zones.find(z => z.p1_name === 'BYE' && z.p2_name === 'BYE');
+  if (byeZone) {
+    const zoneUpdate = byeZone.p1_name === 'BYE' && byeZone.p2_name === 'BYE'
+      ? { p1_name: name, winner: name, is_bye: true }
+      : { [byeZone.p1_name === 'BYE' ? 'p1_name' : 'p2_name']: name, ...EMPTY_RESULT, is_bye: false };
+    const next = catMatches.map(m => (m.id === byeZone.id ? { ...m, ...zoneUpdate } : m));
+    const cascade = resolveCategoryMatches(next);
+    const invalidated = cascade.filter(c => {
+      const m = catMatches.find(x => x.id === c.matchId);
+      return m.winner && !m.is_bye && m.p1_name !== 'BYE' && m.p2_name !== 'BYE' && 'winner' in c.updates && !c.updates.winner;
+    }).length;
+    return {
+      inserts: [],
+      updates: [{ matchId: byeZone.id, updates: zoneUpdate }, ...cascade],
+      deleteIds: [],
+      numPairs: zones.length * 2,
+      notes: [
+        `Entra en la ${byeZone.round_name}.`,
+        ...(invalidated ? [`Se borran ${invalidated} resultados del cuadro.`] : [])
+      ]
+    };
+  }
+
+  // 2) Cuadro completo: se agrega una zona y se reconstruye el cuadro al tamaño siguiente
+  const newSize = zones.length * 2 + 2;
+  if (!BRACKET_MAPS[newSize]) return { error: `No existe un cuadro para ${newSize} parejas.` };
+  const pairList = [...zones.flatMap(z => [z.p1_name, z.p2_name]), name, 'BYE'];
+  const fresh = generateTournamentMatches(categoryId, newSize, pairList, false).generatedMatches;
+  const newZone = fresh.find(m => m.match_type === 'ZONE' && m.match_index === zones.length);
+  const newBracket = fresh.filter(m => m.match_type === 'BRACKET').map((m, i) => ({ ...m, id: `new-${i}`, match_date: null, match_time: null, court_id: null }));
+
+  // Se conservan los resultados del cuadro anterior cuando el cruce no cambia
+  const working = [...zones, { ...newZone, id: 'new-zone' }, ...newBracket];
+  let carried = 0;
+  for (let pass = 0; pass < 8; pass++) {
+    resolveCategoryMatches(working).forEach(({ matchId, updates }) => Object.assign(working.find(m => m.id === matchId), updates));
+    let progress = false;
+    working.filter(m => m.match_type === 'BRACKET' && !m.winner && !isPlaceholder(m.p1_name) && !isPlaceholder(m.p2_name)).forEach(m => {
+      const old = oldBracket.find(o => o.winner && [o.p1_name, o.p2_name].sort().join('|') === [m.p1_name, m.p2_name].sort().join('|'));
+      if (!old) return;
+      const swap = old.p1_name !== m.p1_name;
+      Object.assign(m, {
+        winner: old.winner,
+        is_wo: old.is_wo,
+        p1_score: swap ? old.p2_score : old.p1_score,
+        p2_score: swap ? old.p1_score : old.p2_score,
+        match_date: old.match_date, match_time: old.match_time, court_id: old.court_id
+      });
+      carried++;
+      progress = true;
+    });
+    if (!progress) break;
+  }
+  const lost = oldBracket.filter(o => o.winner && !o.is_bye && o.p1_name !== 'BYE' && o.p2_name !== 'BYE').length - carried;
+  const zoneUpdates = resolveCategoryMatches(zones);
+  const strip = ({ id: _id, ...rest }) => rest;
+  return {
+    inserts: working.filter(m => String(m.id).startsWith('new')).map(strip),
+    updates: zoneUpdates,
+    deleteIds: oldBracket.map(m => m.id),
+    numPairs: newSize,
+    notes: [
+      `Nueva ${newZone.round_name}. El cuadro pasa a ${realPairs + 1} parejas.`,
+      ...(lost > 0 ? [`Se borran ${lost} resultados del cuadro.`] : [])
+    ]
+  };
+}
+
+/**
+ * Cambio de parejas en una zona del cuadro tradicional. Si una pareja elegida estaba en otra zona,
+ * ocupa su lugar la pareja desplazada (intercambio), así nadie queda duplicado ni afuera.
+ * Una pareja que sale de la zona a cambio de un pase libre pasa al pase libre de otra zona.
+ * Devuelve { changes: [{ matchId, updates }] } o { error }.
+ */
+export function swapZonePairs(catMatches, zoneId, p1, p2) {
+  const categoryId = catMatches.find(m => m.id === zoneId)?.category_id;
+  const zones = catMatches.filter(m => m.match_type === 'ZONE' && m.category_id === categoryId).map(m => ({ ...m }));
+  const target = zones.find(z => z.id === zoneId);
+  if (!target) return { error: 'La zona no existe.' };
+  if (p1 === p2) return { error: p1 === 'BYE' ? 'La zona necesita al menos una pareja.' : 'Una pareja no puede jugar contra sí misma.' };
+  const displaced = [target.p1_name, target.p2_name].filter(n => n !== p1 && n !== p2);
+  const incoming = [p1, p2].filter(n => n !== target.p1_name && n !== target.p2_name);
+  const changes = new Map();
+  const pending = displaced.filter(n => n && n !== 'BYE');
+  incoming.forEach(name => {
+    if (name === 'BYE') return;
+    const source = zones.find(z => z.id !== zoneId && (z.p1_name === name || z.p2_name === name));
+    if (!source) return;
+    const key = source.p1_name === name ? 'p1_name' : 'p2_name';
+    source[key] = pending.shift() ?? 'BYE';
+    changes.set(source.id, source);
+  });
+  for (const name of pending) {
+    const free = zones.find(z => z.id !== zoneId && (z.p1_name === 'BYE' || z.p2_name === 'BYE'));
+    if (!free) return { error: `No hay otra zona con pase libre para ubicar a ${name}.` };
+    free[free.p1_name === 'BYE' ? 'p1_name' : 'p2_name'] = name;
+    changes.set(free.id, free);
+  }
+  Object.assign(target, { p1_name: p1, p2_name: p2 });
+  changes.set(target.id, target);
+  return { changes: [...changes.values()].map(z => ({
+    matchId: z.id,
+    updates: { p1_name: z.p1_name, p2_name: z.p2_name, ...EMPTY_RESULT, is_bye: z.p1_name === 'BYE' || z.p2_name === 'BYE' }
+  })) };
+}
+
+/**
+ * Renombra una pareja dentro de una sola categoría (cruces y ganadores). Devuelve [{ matchId, updates }].
+ */
+export function renamePairInMatches(catMatches, categoryId, oldName, newName) {
+  return catMatches
+    .filter(m => m.category_id === categoryId && [m.p1_name, m.p2_name, m.winner].some(n => n && samePair(n, oldName)))
+    .map(m => {
+      const swap = (n) => (n && samePair(n, oldName) ? newName : n);
+      return { matchId: m.id, updates: { p1_name: swap(m.p1_name), p2_name: swap(m.p2_name), winner: swap(m.winner) } };
+    });
 }
 
 /**
@@ -600,7 +934,9 @@ export function checkMatchEdit(match, edit, allMatches, durationMin = 60) {
   const warnings = [];
   const others = allMatches.filter(m => m.id !== match.id && !m.is_bye);
 
-  if (next.p1_name && next.p1_name === next.p2_name) errors.push('Una pareja no puede jugar contra sí misma.');
+  if (next.p1_name && next.p1_name === next.p2_name) {
+    errors.push(next.p1_name === 'BYE' ? 'La zona necesita al menos una pareja.' : 'Una pareja no puede jugar contra sí misma.');
+  }
 
   if (next.match_type === 'AMERICANO' && next.p1_name && next.p2_name) {
     const key = [next.p1_name, next.p2_name].sort().join('|');

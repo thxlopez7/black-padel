@@ -31,6 +31,10 @@ export default function AmericanoView({ category, allMatches, courts, mode, onBa
     return matches.filter(m => m.match_type === 'AMERICANO_FINAL');
   }, [matches]);
 
+  const semiMatches = useMemo(() => {
+    return matches.filter(m => m.match_type === 'AMERICANO_SEMI').sort((a, b) => a.round_name.localeCompare(b.round_name));
+  }, [matches]);
+
   // Obtener lista única de parejas de esta categoría
   const pairNames = useMemo(() => {
     const namesSet = new Set();
@@ -79,7 +83,7 @@ export default function AmericanoView({ category, allMatches, courts, mode, onBa
 
   const hasPlayed = completedMatches > 0;
   const currentLeader = hasPlayed && standings.length > 0 ? standings[0] : null;
-  // Con Gran Final el campeón es su ganador; sin final, el 1º de la tabla al terminar todas las fechas
+  // Con final el campeón es su ganador; sin final, el 1º de la tabla al terminar todas las fechas
   const champion = finalMatch
     ? (finalMatch.winner ? standings.find(t => t.name === finalMatch.winner) : null)
     : (groupStageCompleted ? currentLeader : null);
@@ -197,8 +201,8 @@ export default function AmericanoView({ category, allMatches, courts, mode, onBa
           {finalMatch?.winner ? (
             <p className="text-xs text-gray-300 font-semibold">
               {finalMatch.is_wo
-                ? `Ganó la Gran Final por W.O. ante ${finalMatch.winner === finalMatch.p1_name ? finalMatch.p2_name : finalMatch.p1_name}`
-                : `Ganó la Gran Final ${finalScoreFor(finalMatch)} ante ${finalMatch.winner === finalMatch.p1_name ? finalMatch.p2_name : finalMatch.p1_name}`}
+                ? `Ganó la final por W.O. ante ${finalMatch.winner === finalMatch.p1_name ? finalMatch.p2_name : finalMatch.p1_name}`
+                : `Ganó la final ${finalScoreFor(finalMatch)} ante ${finalMatch.winner === finalMatch.p1_name ? finalMatch.p2_name : finalMatch.p1_name}`}
             </p>
           ) : (
             <div className="flex justify-center items-center gap-4 text-xs text-gray-300 font-semibold">
@@ -311,17 +315,33 @@ export default function AmericanoView({ category, allMatches, courts, mode, onBa
               </div>
             </div>
 
-            {/* SECCIÓN GRAN FINAL SI EXISTE */}
+            {/* SEMIFINALES: 1º vs 2º y 3º vs 4º de la tabla */}
+            {semiMatches.length > 0 && (
+              <div className="bg-gray-900 border border-gray-700 rounded-2xl p-5 shadow-2xl mt-2">
+                <h4 className="text-sm font-bold text-white uppercase tracking-wider mb-1">Semifinales</h4>
+                <p className="text-[11px] text-gray-400 mb-3">1º vs 2º · 3º vs 4º</p>
+                <div className="space-y-3">
+                  {semiMatches.map(m => (
+                    <div key={m.id}>
+                      <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-1">{m.round_name}</p>
+                      <MatchCard match={m} courts={courts} mode={mode} onEdit={setEditingMatch} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* FINAL */}
             {finalMatches.length > 0 && (
               <div className="bg-gray-900 border border-yellow-500/40 rounded-2xl p-5 shadow-2xl mt-2 relative overflow-hidden">
                 <div className="absolute top-0 right-0 bg-yellow-500 text-gray-950 text-[9px] font-black uppercase px-3 py-0.5 rounded-bl-lg tracking-widest">
-                  Gran Final
+                  Final
                 </div>
                 <h4 className="text-sm font-bold text-yellow-400 uppercase tracking-wider mb-3 flex items-center gap-2">
                   <svg className="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1.323l3.954 1.582 1.599-.8a1 1 0 011.104 1.664l-1.01 1.01a6.002 6.002 0 01-3.647 5.2V14h1a1 1 0 110 2H6a1 1 0 110-2h1v-2.02a6.002 6.002 0 01-3.647-5.2l-1.01-1.01A1 1 0 013.447 4.1l1.599.8L9 3.323V3a1 1 0 011-1zm-1 9.948V14h2v-2.052a4.002 4.002 0 000-7.896V3.708L8 4.708l-1.5 1.5A4.002 4.002 0 009 11.948z" clipRule="evenodd" />
                   </svg>
-                  Gran Final: 1º contra 2º
+                  {semiMatches.length > 0 ? 'Final: ganadores de las semifinales' : 'Final: 1º contra 2º'}
                 </h4>
                 <div className="space-y-3">
                   {finalMatches.map(m => (
@@ -412,7 +432,7 @@ function MatchCard({ match, courts, mode, onEdit }) {
   const courtName = courts.find(c => c.id === match.court_id)?.name || 'Sin cancha';
   const dateStr = formatMatchSchedule(match);
 
-  const isPending = [match.p1_name, match.p2_name].some(n => !n || n.includes('Tabla Americano'));
+  const isPending = [match.p1_name, match.p2_name].some(n => !n || n.includes('Tabla Americano') || n.startsWith('Ganador '));
   const isEditable = mode === 'admin' && !isPending && !isByeMatch;
 
   const p1Classes = `grid grid-cols-[1fr_28px_28px_28px] items-stretch min-h-[44px] transition-all relative ${

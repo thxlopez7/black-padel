@@ -85,7 +85,7 @@ black-padel/
 │   │   ├── AdminLogin.js                # Modal de login de administrador
 │   │   ├── AdminPayments.js             # Panel de control de pagos
 │   │   ├── AdminPlayers.js              # Gestión de parejas y categorías
-│   │   ├── AmericanoView.js             # Tabla de posiciones, fechas y Gran Final del americano
+│   │   ├── AmericanoView.js             # Tabla de posiciones, fechas, semifinales y final del americano
 │   │   ├── BracketView.js               # Zonas y cuadro eliminatorio (formato tradicional)
 │   │   ├── CourtSchedule.js             # Cronograma público por cancha
 │   │   ├── FixtureView.js               # Fixture público por día y horario, con búsqueda de jugador
@@ -117,51 +117,26 @@ black-padel/
 ### Esquema de Tablas
 
 #### 1. `categories`
-Almacena las divisiones o categorías del torneo (ej: "4ta Caballeros", "6ta Damas", "Suma 11").
-- `id` (text / uuid): Identificador único.
-- `name` (text): Nombre visible de la categoría.
-- `gender` (text): Género ('Caballeros', 'Damas', 'Mixto').
-- `active` (boolean): Indica si la categoría está activa para visualización.
-- `bracket_type` (text): Tipo de formato ('groups_playoffs', 'direct_elimination').
+- `id` (uuid), `name` (text), `num_pairs` (integer): parejas del torneo generado.
+- `current_step` (text): `registration` (sin sorteo), `bracket` (tradicional) o `americano`.
+- `created_at` (timestamptz).
 
 #### 2. `courts`
-Define las canchas disponibles para la disputa de partidos.
-- `id` (text / uuid): Identificador único.
-- `name` (text): Nombre de la cancha (ej: "Cancha 1", "Cancha Central").
-- `active` (boolean): Si está habilitada para programar partidos.
-- `order_index` (integer): Orden secuencial en el gestor y vistas públicas.
+- `id` (uuid), `name` (text), `created_at` (timestamptz).
 
-#### 3. `players`
-Registra las parejas inscritas en cada categoría.
-- `id` (text / uuid): Identificador único.
-- `category_id` (text / uuid): Llave foránea a `categories`.
-- `pair_name` (text): Nombre identificador de la pareja (ej: "Pérez / González").
-- `player1_name` (text): Nombre del jugador 1.
-- `player2_name` (text): Nombre del jugador 2.
-- `player1_phone` (text): Teléfono de contacto.
-- `player2_phone` (text): Teléfono de contacto.
-- `paid` (boolean): Estado del pago de inscripción.
-- `seed` (integer): Cabeza de serie (1, 2, 3...) o null.
+#### 3. `players` (una fila por pareja)
+- `id` (uuid), `category_id` (uuid, FK a `categories`, borrado en cascada).
+- `name` (text): jugador 1. `partner` (text): jugador 2. En el cuadro la pareja figura como `"name & partner"`.
+- `has_paid` (boolean), `created_at` (timestamptz).
 
 #### 4. `matches`
-Es el núcleo del fixture y los cuadros eliminatorios.
-- `id` (text / uuid): Identificador único del partido.
-- `category_id` (text / uuid): Llave foránea a `categories`.
-- `court_id` (text / uuid): Cancha asignada (nullable).
-- `stage` (text): Etapa ('group', 'playoff', 'consolacion').
-- `round` (text): Nombre de la fase ('Zona A', 'Octavos', 'Cuartos', 'Semifinales', 'Final').
-- `match_number` (integer): Posición secuencial del partido dentro de la ronda.
-- `pair1_name` (text): Nombre de la primera pareja o marcador 'BYE'.
-- `pair2_name` (text): Nombre de la segunda pareja o marcador 'BYE'.
-- `score` (text): Resultado en texto (ej: "6-4 3-6 10-7").
-- `winner` (text): Nombre de la pareja que ganó el partido (o null si está pendiente).
-- `match_time` (text): Hora del encuentro (formato "HH:mm").
-- `match_date` (text): Día o fecha asignada (ej: "Viernes", "2026-10-15").
-- `is_bye` (boolean): `true` si una de las plazas avanza automáticamente sin jugar.
-- `next_match_id` (text / uuid): Referencia al partido siguiente hacia el cual avanza el ganador.
-- `slot` (integer): Ranura de destino en el siguiente partido (1 para `pair1_name`, 2 para `pair2_name`).
-
----
+- `id` (uuid), `category_id` (uuid, FK en cascada), `court_id` (uuid, FK, `null` si se borra la cancha).
+- `match_type` (text): `ZONE`, `BRACKET`, `AMERICANO`, `AMERICANO_SEMI` o `AMERICANO_FINAL`.
+- `round_name` (text), `round_index` (integer), `match_index` (integer): ubicación dentro del cuadro.
+- `p1_name`, `p2_name` (text): pareja, `BYE` (pase libre) o lugar por definir (`Zona A 1º`, `1º Tabla Americano`, `Ganador Semifinal 1`).
+- `p1_score`, `p2_score` (jsonb): games por set, `["6","4",""]`.
+- `winner` (text), `is_wo` (boolean), `is_bye` (boolean).
+- `match_date` (date), `match_time` (time).
 
 ### Seguridad Row-Level Security (RLS)
 
@@ -215,37 +190,37 @@ El script [supabase/security_rls_setup.sql](supabase/security_rls_setup.sql) apl
 ---
 
 ### 5.5. Generación de Torneos
-- **Configurar torneo** (por categoría) toma las parejas inscriptas en orden de inscripción y permite elegir el formato:
-  1. **Americano:** todos contra todos por puntos (3 por victoria) y **Gran Final entre el 1º y el 2º**. Desempate: resultado entre sí (empate de dos parejas), diferencia de sets, diferencia de games y games a favor.
-  2. **Tradicional:** zonas y cuadro eliminatorio; el tamaño del cuadro se ajusta a las parejas inscriptas y los lugares vacíos son BYE.
-- **Sorteo general:** genera de una vez las categorías que todavía no tienen torneo (menos de 6 parejas: americano; 6 o más: tradicional). Nunca reemplaza un torneo existente.
+- **Configurar torneo** (por categoría) toma las parejas inscriptas y permite elegir el formato:
+  1. **Americano:** todos contra todos (3 puntos por victoria). Al terminar las fechas: semifinales 1º vs 2º y 3º vs 4º, y final entre los ganadores (con 3 parejas, final directa). Desempate: resultado entre sí (dos empatadas), diferencia de sets, diferencia de games y games a favor. W.O. = 6-0 6-0.
+  2. **Tradicional:** zonas de 2 parejas (ganador y perdedor pasan al cuadro) y cuadro eliminatorio. Con cantidad impar, una zona tiene pase libre (BYE).
+- **Sorteo general:** genera las categorías sin torneo (menos de 6 parejas: americano). Nunca reemplaza uno existente.
+- **Pareja de último momento:** desde Configurar torneo, "Agregar al torneo". Americano: juega contra todas en las fechas en que el rival descansa. Tradicional: ocupa un pase libre o se agrega una zona. Los horarios se reacomodan en cascada sin tocar lo jugado.
 
 ---
 
 ### 5.6. Resultados y Edición del Fixture
-- **`MatchEditorModal.js`:** el ganador se calcula desde el marcador (1 set, pro-set o 2 de 3) o se marca por W.O.
-- En partidos del americano sin jugar se puede **cambiar el cruce**. Se bloquean cruces repetidos y una pareja contra sí misma; se avisa si una pareja ya juega en esa fecha.
-- Fecha, hora y cancha se pueden **modificar** con aviso si la cancha está ocupada o si un jugador tiene otro partido a esa hora (en cualquier categoría).
+- El ganador se calcula desde el marcador (1 set, pro-set o 2 de 3) o por W.O. Se rechazan sets incompletos o empatados.
+- Todos los partidos se abren, incluso los de pase libre (horario). En las zonas se pueden cambiar las parejas: si se elige una de otra zona, se intercambian.
+- En el americano, los cruces sin jugar se pueden cambiar (se bloquean cruces repetidos).
+- Avisos de cancha ocupada o jugador con otro partido a la misma hora (en cualquier categoría).
+- Renombrar una pareja ya sorteada actualiza su cuadro; no se puede mover de categoría.
 
 ---
 
 ### 5.7. Progresión de Llaves y Puntajes
-
-El motor en `src/lib/tournamentLogic.js` recalcula la categoría completa con cada resultado (`resolveCategoryMatches`):
-- Ganadores y segundos de zona pasan al cuadro; los BYE avanzan solos.
-- Si se corrige un resultado, se actualizan las rondas siguientes y se invalida el resultado de un partido cuyos participantes cambiaron.
-- En el americano, la Gran Final se completa con el 1º y el 2º recién cuando se jugaron todas las fechas.
+`resolveCategoryMatches` (`src/lib/tournamentLogic.js`) recalcula una categoría con cada resultado, siempre por separado de las demás:
+- Ganadores y segundos de zona pasan al cuadro; contra un BYE se avanza solo.
+- Si se corrige o borra un resultado, se actualizan las rondas siguientes y se borran los resultados que ya no corresponden.
+- Americano: las semis se arman al jugarse todas las fechas y la final al cerrarse las semis.
 
 ---
 
 ### 5.8. Gestor de Horarios
-- Programa **las categorías seleccionadas** sin modificar las demás y respetando los turnos que ya ocupan.
-- Un **jugador** nunca tiene dos partidos superpuestos, aunque esté inscripto en varias categorías; descanso mínimo configurable.
-- Los partidos ya jugados conservan su horario.
-- Tradicional: cada ronda empieza cuando terminó la anterior. Americano: las fechas en orden y la Gran Final al final.
-- Días configurables por fase (grupos, semifinales, finales) y **resumen previo** por categoría antes de guardar.
-
----
+- Plantilla viernes a domingo (vie 19-00, sáb 10-00, dom 10-19 para semis y finales). Cada jornada define qué instancias admite y un **tope de partidos** opcional.
+- Programa las categorías elegidas sin tocar las demás; los partidos jugados no se mueven.
+- Un jugador nunca juega dos partidos a la vez, aunque esté en varias categorías; descanso mínimo configurable.
+- Cada ronda empieza cuando terminó la anterior. Si una instancia no entra en sus jornadas, usa el primer turno libre de otra y lo informa.
+- Resumen previo por categoría antes de guardar.
 
 ## 6. Parámetros de Seguridad y Rendimiento Implementados
 
@@ -254,7 +229,7 @@ El motor en `src/lib/tournamentLogic.js` recalcula la categoría completa con ca
 | **Row-Level Security (RLS)** | Activo | Políticas en PostgreSQL que bloquean escrituras no autorizadas (`error 42501`) y permiten lectura pública. |
 | **Cabeceras HTTP OWASP** | Activo | Configurado en `next.config.mjs`: `Strict-Transport-Security`, `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`. |
 | **Ocultamiento de Tecnología** | Activo | `poweredByHeader: false` en Next.js (elimina la cabecera `X-Powered-By: Next.js`). |
-| **Sanitización Defensiva** | Activo | Funciones `sanitizeString` y `sanitizeScores` en `supabaseService.js` que limpian inyecciones HTML/XSS y validan rangos numéricos (0–99). |
+| **Validación de datos** | Activo | Marcadores, nombres y cruces se validan en `tournamentLogic.js` antes de guardar; React escapa todo el texto que se muestra. |
 | **Exclusión de Secretos en Git** | Activo | `.gitignore` blindado para excluir `.env`, `.env*.local`, claves privadas `.pem`, `.key`, `.cert`. Ningún secreto figura en el historial de Git. |
 | **Caché en Tiempo Real** | Activo | `export const revalidate = 0` en `page.js` para asegurar que las consultas del público siempre reflejen los datos actuales de Supabase. |
 | **Optimización de Assets** | Activo | Limpieza de 17 archivos obsoletos. Únicamente se sirven imágenes esenciales comprimidas (`RD.jpeg`, `flyer.png`, `wallpaper_tapia.jpg`). |

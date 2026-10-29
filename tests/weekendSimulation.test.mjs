@@ -13,7 +13,7 @@ const REST = 0;
 const config={categoryIds:cats.map(c=>c.id),matchDurationMin:60,restMin:REST,courts,daysConfig:[
  {date:'2026-10-31',startTime:'09:00',endTime:'23:00',phase:'grupos'},
  {date:'2026-11-01',startTime:'09:00',endTime:'14:00',phase:'grupos'},
- {date:'2026-11-01',startTime:'16:00',endTime:'20:00',phase:'finals'}]};
+ {date:'2026-11-01',startTime:'14:00',endTime:'21:00',phase:'playoffs'}]};
 const {matches:sch,unscheduled,summary}=L.generateGlobalSchedule(matches,cats,config);
 const t=m=>new Date(`${m.match_date}T${m.match_time}:00`).getTime();
 // --- verificaciones ---
@@ -33,7 +33,7 @@ for (const m of all.filter(m=>m.match_type==='AMERICANO')){ let s1=[],s2=[]; let
 for (const c of cats){ const cm=all.filter(m=>m.category_id===c.id); L.resolveCategoryMatches(cm).forEach(u=>Object.assign(all.find(m=>m.id===u.matchId),u.updates));
   const st=L.calculateAmericanoStandings(c.pairs,all.filter(m=>m.category_id===c.id&&m.match_type==='AMERICANO'));
   const fin=all.find(m=>m.category_id===c.id&&m.match_type==='AMERICANO_FINAL');
-  assert.equal(fin.p1_name,st[0].name); assert.equal(fin.p2_name,st[1].name); assert.ok(fin.match_date,'final mantiene horario');
+  const semi=all.find(m=>m.category_id===c.id&&m.round_name==='Semifinal 1'); assert.equal(semi.p1_name,st[0].name); assert.equal(semi.p2_name,st[1].name); assert.equal(fin.p1_name,'Ganador Semifinal 1'); assert.ok(fin.match_date,'final mantiene horario');
 
 }
 assert.equal(problems.length,0); assert.equal(unscheduled,0);

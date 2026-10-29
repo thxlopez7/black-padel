@@ -113,4 +113,14 @@ export async function saveGeneratedMatches(matchesArray) {
 export const deleteMatchesByCategory = (categoryId) =>
   deleteWhere('matches', 'category_id', categoryId, 'deleteMatchesByCategory');
 
+export async function deleteMatchesByIds(ids) {
+  if (ids.length === 0) return true;
+  const { error } = await supabase.from('matches').delete().in('id', ids);
+  if (error) {
+    logError('deleteMatchesByIds', error);
+    return false;
+  }
+  return true;
+}
+
 export const updateMatch = (id, updates) => updateOne('matches', id, updates, 'updateMatch');
