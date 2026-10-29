@@ -256,3 +256,21 @@ test('horarios: un partido fijado se respeta y las rondas siguientes de su categ
   res.matches.filter(m => m.match_type !== 'ZONE').forEach(m => assert.ok(t(m) >= pinnedAt + 3600000, `${m.round_name} después del partido fijado`));
   assert.ok(!res.matches.some(m => m.court_id === 'c1' && t(m) === pinnedAt), 'su cancha queda reservada');
 });
+
+test('horarios no disponibles: el gestor no programa a la pareja en su franja y el editor avisa', () => {
+  const all = resolve(build(8));
+  const pair = of(all, 'ZONE')[0].p1_name;
+  const unavailable = [{ pair, date: '2026-11-07', from: '00:00', to: '00:00' }, { pair, date: '2026-11-08', from: '10:00', to: '14:00' }];
+  const day = (date) => ({ date, startTime: '10:00', endTime: '22:00', phase: 'todas' });
+  const res = L.generateGlobalSchedule(all, [{ id: 'C', name: '7ma' }], {
+    daysConfig: [day('2026-11-07'), day('2026-11-08')], matchDurationMin: 60, courts: [{ id: 'c1' }, { id: 'c2' }], categoryIds: ['C'], unavailable
+  });
+  assert.equal(res.unscheduled, 0);
+  const own = res.matches.filter(m => [m.p1_name, m.p2_name].includes(pair));
+  assert.ok(own.length > 0);
+  own.forEach(m => assert.ok(m.match_date === '2026-11-08' && m.match_time >= '14:00', `${m.round_name} ${m.match_date} ${m.match_time}`));
+  // Avisos al editar a mano
+  const { warnings } = L.checkMatchEdit(own[0], { match_date: '2026-11-08', match_time: '13:30' }, all, 60, unavailable);
+  assert.ok(warnings.some(w => w.includes('pidió no jugar')));
+  assert.equal(L.checkMatchEdit(own[0], { match_date: '2026-11-08', match_time: '14:00' }, all, 60, unavailable).warnings.filter(w => w.includes('pidió')).length, 0);
+});

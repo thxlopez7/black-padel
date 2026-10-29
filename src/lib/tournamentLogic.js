@@ -683,6 +683,22 @@ export const DAY_PHASES = {
 const isSchedulable = (m) => !m.is_bye && m.p1_name !== 'BYE' && m.p2_name !== 'BYE';
 
 /**
+ * Franjas en las que una pareja no puede jugar. Cada franja: { pair, date: 'AAAA-MM-DD', from: 'HH:MM', to: 'HH:MM' };
+ * "to" 00:00 (o menor que "from") termina a la medianoche. Devuelve la franja que se superpone con
+ * un partido de esa pareja que empieza en start (ms) y dura durationMs, o null.
+ */
+export function unavailableWindow(pairName, start, durationMs, unavailable = []) {
+  if (!pairName || isPlaceholder(pairName)) return null;
+  return unavailable.find(w => {
+    if (!samePair(w.pair, pairName) || !w.date) return false;
+    const from = slotStart(w.date, w.from || '00:00');
+    let to = slotStart(w.date, w.to || '00:00');
+    if (to <= from) to += 86400000;
+    return start < to && start + durationMs > from;
+  }) || null;
+}
+
+/**
  * Nivel de una categoría para ordenar horarios: menor es mejor (juega más tarde).
  * - "Suma 9": la suma de categorías de la pareja (9).
  * - Categoría individual ("7ma", "5ta", "3ra"): se compara como una pareja de esa categoría (7ma → 14),
@@ -711,6 +727,7 @@ export function categoryLevel(name = '') {
  *   de partidos (day.maxMatches) para no cargar de más un día.
  *   Si una instancia no entra en sus jornadas, usa el primer turno libre de otra (summary.outOfPhase).
  * - Un cierre menor o igual al inicio (ej. 19:00 a 00:00) termina al día siguiente.
+ * - config.unavailable: franjas en las que una pareja no puede jugar (ver unavailableWindow).
  * - config.pinnedIds: partidos con horario pedido por el organizador; se respetan y el resto se acomoda
  *   alrededor (las rondas siguientes de su categoría van después).
  * - config.keepExisting: conserva los horarios ya asignados que siguen siendo válidos y solo
@@ -719,7 +736,7 @@ export function categoryLevel(name = '') {
  * Devuelve { matches, changed, unscheduled, summary }.
  */
 export function generateGlobalSchedule(allMatches, categories, config) {
-  const { daysConfig = [], matchDurationMin, courts = [], categoryIds, restMin = 0, keepExisting = false, pinnedIds = [] } = config;
+  const { daysConfig = [], matchDurationMin, courts = [], categoryIds, restMin = 0, keepExisting = false, pinnedIds = [], unavailable = [] } = config;
   const pinned = new Set(pinnedIds);
   const duration = Number(matchDurationMin);
   const durationMs = duration * 60000;
@@ -881,7 +898,8 @@ export function generateGlobalSchedule(allMatches, categories, config) {
     if (keepExisting && hasSchedule(m)) {
       const start = slotStart(m.match_date, m.match_time);
       release(m);
-      if (start >= minStart && courtFree(m.court_id, start) && playersFree(list, start)) {
+      const free = ![m.p1_name, m.p2_name].some(n => unavailableWindow(n, start, durationMs, unavailable));
+      if (start >= minStart && free && courtFree(m.court_id, start) && playersFree(list, start)) {
         claim(m, m.court_id, start);
         markRoundEnd(m, start);
         notePhaseHour(m, start);
@@ -894,8 +912,10 @@ export function generateGlobalSchedule(allMatches, categories, config) {
 
     const phase = getPhase(m);
     const strictPhase = phaseHasDays(phase);
+    const available = (start) => ![m.p1_name, m.p2_name].some(n => unavailableWindow(n, start, durationMs, unavailable));
     const fits = (s, anyPhase) =>
       s.start >= minStart &&
+      available(s.start) &&
       (anyPhase || !strictPhase || s.phases.includes(phase)) &&
       (!(Number(daysConfig[s.dayIdx].maxMatches) > 0) || (dayCount.get(s.dayIdx) || 0) < Number(daysConfig[s.dayIdx].maxMatches)) &&
       courtFree(s.courtId, s.start) &&
@@ -1189,7 +1209,7 @@ export function renamePairInMatches(catMatches, categoryId, oldName, newName) {
  * - warnings: se pueden confirmar (pareja que ya juega en esa fecha, cancha ocupada,
  *   jugador con otro partido a la misma hora en cualquier categoría).
  */
-export function checkMatchEdit(match, edit, allMatches, durationMin = 60) {
+export function checkMatchEdit(match, edit, allMatches, durationMin = 60, unavailable = []) {
   const next = { ...match, ...edit };
   const errors = [];
   const warnings = [];
@@ -1220,6 +1240,10 @@ export function checkMatchEdit(match, edit, allMatches, durationMin = 60) {
     const players = [next.p1_name, next.p2_name].flatMap(playersOf);
     const clash = others.find(m => overlaps(m) && [m.p1_name, m.p2_name].flatMap(playersOf).some(p => players.includes(p)));
     if (clash) warnings.push(`Un jugador ya tiene otro partido a esa hora (${clash.round_name}: ${clash.p1_name} contra ${clash.p2_name}).`);
+    [next.p1_name, next.p2_name].forEach(p => {
+      const w = unavailableWindow(p, start, durationMin * 60000, unavailable);
+      if (w) warnings.push(`${p} pidió no jugar el ${w.date.split('-').reverse().slice(0, 2).join('/')} de ${w.from || '00:00'} a ${w.to || '00:00'}.`);
+    });
   }
 
   return { errors, warnings };

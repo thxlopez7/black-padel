@@ -630,6 +630,8 @@ export default function TournamentApp({ initialCategories }) {
   const [categories, setCategories] = useState(initialCategories || []);
   const [courts, setCourts] = useState([]);
   const [players, setPlayers] = useState([]);
+  // Franjas en las que cada pareja pidió no jugar (gestor de horarios y editor de partidos)
+  const unavailable = players.flatMap(p => (p.unavailable || []).map(w => ({ ...w, pair: pairLabel(p) })));
   const [matches, setMatches] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [mode, setMode] = useState("public"); 
@@ -743,7 +745,7 @@ export default function TournamentApp({ initialCategories }) {
     let missing = 0;
     const config = cascadeConfig(fresh, courts);
     if (config && fresh.some(m => m.category_id === categoryId && m.match_date)) {
-      const { changed, unscheduled } = generateGlobalSchedule(fresh, categories, { ...config, categoryIds: [categoryId], keepExisting: true });
+      const { changed, unscheduled } = generateGlobalSchedule(fresh, categories, { ...config, categoryIds: [categoryId], keepExisting: true, unavailable });
       await Promise.all(changed.map(m => updateMatch(m.id, { match_date: m.match_date, match_time: m.match_time, court_id: m.court_id })));
       fresh = await getMatches();
       missing = unscheduled;
@@ -760,7 +762,7 @@ export default function TournamentApp({ initialCategories }) {
     if (config.daysConfig.length === 0) return showToast("Agrega al menos un día de competencia.", "error");
     const invalidDay = config.daysConfig.find(d => !d.date || d.endTime === d.startTime);
     if (invalidDay) return showToast("Cada día necesita fecha y horarios de inicio y cierre distintos.", "error");
-    const { matches: scheduled, changed, unscheduled, summary } = generateGlobalSchedule(matches, categories, config);
+    const { matches: scheduled, changed, unscheduled, summary } = generateGlobalSchedule(matches, categories, { ...config, unavailable });
     if (scheduled.length === 0) return showToast("No hay partidos pendientes de programar en esas categorías.", "error");
 
     const lines = categories
@@ -1425,6 +1427,7 @@ export default function TournamentApp({ initialCategories }) {
               <AmericanoView 
                 category={activeCat}
                 allMatches={matches}
+                unavailable={unavailable}
                 courts={courts}
                 mode={mode}
                 onBack={() => setView(mode === "admin" ? "admin_home" : "home")}
@@ -1437,6 +1440,7 @@ export default function TournamentApp({ initialCategories }) {
             <BracketView 
               category={activeCat}
               allMatches={matches}
+              unavailable={unavailable}
               courts={courts}
               mode={mode}
               onBack={() => setView(mode === "admin" ? "admin_home" : "home")}

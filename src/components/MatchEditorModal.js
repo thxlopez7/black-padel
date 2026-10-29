@@ -12,7 +12,7 @@ import { formatTime } from "../lib/format";
 const EMPTY_SCORE = ['', '', ''];
 const inputClass = "w-full bg-gray-900 border border-gray-700 rounded p-1.5 text-center text-sm text-white focus:border-red-600 outline-none";
 
-export default function MatchEditorModal({ match, courts, allMatches = [], onClose, onSave }) {
+export default function MatchEditorModal({ match, courts, allMatches = [], unavailable = [], onClose, onSave }) {
   const [date, setDate] = useState(match.match_date || '');
   const [time, setTime] = useState(formatTime(match.match_time));
   const [courtId, setCourtId] = useState(match.court_id || '');
@@ -60,7 +60,7 @@ export default function MatchEditorModal({ match, courts, allMatches = [], onClo
     match_time: time || null,
     court_id: courtId || null
   };
-  const { errors, warnings } = checkMatchEdit(match, edit, allMatches);
+  const { errors, warnings } = checkMatchEdit(match, edit, allMatches, 60, unavailable);
   const warningsKey = warnings.join('|');
 
   const scoreResult = winnerFromScore(p1Name, p2Name, p1Score, p2Score);

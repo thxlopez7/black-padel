@@ -14,7 +14,7 @@ function finalScoreFor(match) {
   return (own || []).map((g, i) => (g === '' || g == null ? null : `${g}-${rival?.[i] ?? ''}`)).filter(Boolean).join(' ');
 }
 
-export default function AmericanoView({ category, allMatches, courts, mode, onBack, onMatchUpdate }) {
+export default function AmericanoView({ unavailable = [], category, allMatches, courts, mode, onBack, onMatchUpdate }) {
   const [activeTab, setActiveTab] = useState("all"); // "all", "standings", "matches"
   const [editingMatch, setEditingMatch] = useState(null);
 
@@ -407,6 +407,7 @@ export default function AmericanoView({ category, allMatches, courts, mode, onBa
         <MatchEditorModal 
           match={editingMatch}
           allMatches={allMatches}
+          unavailable={unavailable}
           courts={courts} 
           onClose={() => setEditingMatch(null)} 
           onSave={async (updates) => {

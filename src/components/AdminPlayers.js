@@ -6,6 +6,14 @@ import { normalizePairName, samePair } from "../lib/tournamentLogic";
 
 const labelOf = (p) => normalizePairName(`${p.name}${p.partner ? ' & ' + p.partner : ''}`);
 
+const WEEKDAYS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+const dayName = (date) => {
+  const [y, m, d] = date.split('-').map(Number);
+  return `${WEEKDAYS[new Date(y, m - 1, d).getDay()]} ${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`;
+};
+// "Sáb 31/10 10:00–14:00"; una franja de 00:00 a 00:00 es el día completo
+const windowLabel = (w) => `${dayName(w.date)} ${w.from === '00:00' && w.to === '00:00' ? 'todo el día' : `${w.from}–${w.to}`}`;
+
 export default function AdminPlayers({ players, categories, matches = [], onBack, onPlayersUpdate, onPairRenamed, showToast }) {
   const [selectedCatId, setSelectedCatId] = useState("all");
   
@@ -13,12 +21,19 @@ export default function AdminPlayers({ players, categories, matches = [], onBack
   const [name2, setName2] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [editingId, setEditingId] = useState(null);
+  // Franjas en las que la pareja no puede jugar: el gestor de horarios no la programa ahí
+  const [unavailable, setUnavailable] = useState([]);
+  const tournamentDays = [...new Set(matches.map(m => m.match_date).filter(Boolean))].sort();
+  const addWindow = () => setUnavailable([...unavailable, { date: tournamentDays[0] || '', from: '00:00', to: '00:00' }]);
+  const updateWindow = (i, field, value) => setUnavailable(unavailable.map((w, j) => (j === i ? { ...w, [field]: value } : w)));
+  const removeWindow = (i) => setUnavailable(unavailable.filter((_, j) => j !== i));
 
   const resetForm = () => {
     setEditingId(null);
     setName1("");
     setName2("");
     setCategoryId("");
+    setUnavailable([]);
   };
 
   const handleSavePlayer = async () => {
@@ -40,10 +55,12 @@ export default function AdminPlayers({ players, categories, matches = [], onBack
       return showToast("Ya juega en el cuadro de su categoría. No se puede mover.", "error");
     }
 
+    if (unavailable.some(w => !w.date)) return showToast("Elegí el día de cada horario no disponible.", "error");
     const playerData = {
       name: player1,
       partner: player2 || null,
-      category_id: targetCat
+      category_id: targetCat,
+      unavailable
     };
     const targetCategory = categories.find(c => c.id === targetCat);
     const drawDone = targetCategory && ['bracket', 'americano'].includes(targetCategory.current_step);
@@ -72,6 +89,7 @@ export default function AdminPlayers({ players, categories, matches = [], onBack
     setName1(p.name);
     setName2(p.partner || "");
     setCategoryId(p.category_id || "");
+    setUnavailable(p.unavailable || []);
   };
 
   // ¿La pareja ya figura en el cuadro de su categoría?
@@ -170,6 +188,34 @@ export default function AdminPlayers({ players, categories, matches = [], onBack
                   </div>
                 ) : null}
                 
+                <div className="md:col-span-full border border-gray-800 rounded-lg p-3 space-y-2">
+                  <div className="flex justify-between items-center gap-2">
+                    <span className="text-[10px] text-gray-500 uppercase tracking-widest font-medium">No puede jugar</span>
+                    <button type="button" onClick={addWindow} className="text-xs text-red-400 hover:text-red-300 font-semibold">+ Agregar horario</button>
+                  </div>
+                  {unavailable.length === 0 && <p className="text-xs text-gray-500">Sin restricciones.</p>}
+                  {unavailable.map((w, i) => (
+                    <div key={i} className="flex flex-wrap items-center gap-2">
+                      {tournamentDays.length > 0 ? (
+                        <select value={w.date} onChange={e => updateWindow(i, 'date', e.target.value)} className="bg-black border border-gray-800 rounded p-2 text-sm text-white outline-none focus:border-red-600">
+                          {!tournamentDays.includes(w.date) && <option value={w.date}>{w.date ? dayName(w.date) : 'Día'}</option>}
+                          {tournamentDays.map(d => <option key={d} value={d}>{dayName(d)}</option>)}
+                        </select>
+                      ) : (
+                        <input type="date" value={w.date} onChange={e => updateWindow(i, 'date', e.target.value)} className="bg-black border border-gray-800 rounded p-2 text-sm text-white outline-none focus:border-red-600" />
+                      )}
+                      <span className="text-xs text-gray-500">de</span>
+                      <input type="time" step="1800" value={w.from} onChange={e => updateWindow(i, 'from', e.target.value)} className="bg-black border border-gray-800 rounded p-2 text-sm text-white outline-none focus:border-red-600" />
+                      <span className="text-xs text-gray-500">a</span>
+                      <input type="time" step="1800" value={w.to} onChange={e => updateWindow(i, 'to', e.target.value)} className="bg-black border border-gray-800 rounded p-2 text-sm text-white outline-none focus:border-red-600" />
+                      <button type="button" onClick={() => removeWindow(i)} className="text-gray-500 hover:text-red-400 p-1" aria-label="Quitar horario">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                      </button>
+                    </div>
+                  ))}
+                  {unavailable.length > 0 && <p className="text-[11px] text-gray-500">De 00:00 a 00:00 es el día completo. El gestor de horarios no la programa en esas franjas.</p>}
+                </div>
+
                 <button onClick={handleSavePlayer} className={`w-full ${editingId ? 'bg-white text-gray-900 hover:bg-gray-300' : 'bg-red-600 text-white hover:bg-red-500'} font-bold py-2.5 rounded text-xs uppercase tracking-widest transition-all shadow-md md:col-span-full mt-2`}>
                   {editingId ? 'Guardar cambios' : `Agregar a ${selectedCatId === "all" ? 'la categoría seleccionada' : categories.find(c=>c.id===selectedCatId)?.name}`}
                 </button>
@@ -197,6 +243,7 @@ export default function AdminPlayers({ players, categories, matches = [], onBack
                         <div className="min-w-0">
                           <div className="text-sm text-white font-bold break-words">{p.name} {p.partner ? `& ${p.partner}` : ''}</div>
                           {selectedCatId === "all" && <div className="text-[10px] text-red-500 uppercase tracking-widest mt-0.5 truncate">{catName}</div>}
+                          {(p.unavailable || []).length > 0 && <div className="text-[11px] text-yellow-500/90 mt-0.5">No puede: {p.unavailable.map(windowLabel).join(' · ')}</div>}
                         </div>
                       </div>
                       <div className="flex gap-2 w-full sm:w-auto justify-end opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">

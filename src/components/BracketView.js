@@ -5,7 +5,7 @@ import { useState } from "react";
 import MatchEditorModal from "./MatchEditorModal";
 import { formatMatchSchedule } from "../lib/format";
 
-export default function BracketView({ category, allMatches, courts, mode, onBack, onMatchUpdate }) {
+export default function BracketView({ unavailable = [], category, allMatches, courts, mode, onBack, onMatchUpdate }) {
   const [editingMatch, setEditingMatch] = useState(null);
 
   // Filtrar partidos de esta categoría
@@ -90,6 +90,7 @@ export default function BracketView({ category, allMatches, courts, mode, onBack
         <MatchEditorModal 
           match={editingMatch}
           allMatches={allMatches}
+          unavailable={unavailable}
           courts={courts} 
           onClose={() => setEditingMatch(null)} 
           onSave={async (updates) => {
