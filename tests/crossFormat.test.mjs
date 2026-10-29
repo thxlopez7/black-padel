@@ -335,3 +335,17 @@ test('horarios: tope de partidos seguidos por jugador', () => {
   const hours = res.matches.filter(m => /Rolo/.test(m.p1_name + m.p2_name)).map(m => Number(m.match_time.slice(0, 2))).sort((x, y) => x - y);
   for (let i = 2; i < hours.length; i++) assert.ok(!(hours[i] - hours[i - 1] === 1 && hours[i - 1] - hours[i - 2] === 1), `tres seguidos: ${hours}`);
 });
+
+test('horarios: quien juega dos categorías descansa entre partidos', () => {
+  const a = withIds(L.generateAmericanoMatches('A', 4, ['Rolo & A1', 'B1 & B2', 'C1 & C2', 'D1 & D2'], false, { withFinal: false }).generatedMatches);
+  const b = withIds(L.generateAmericanoMatches('B', 4, ['Rolo & X1', 'Y1 & Y2', 'Z1 & Z2', 'W1 & W2'], false, { withFinal: false }).generatedMatches);
+  const res = L.generateGlobalSchedule([...a, ...b], [{ id: 'A', name: 'Suma 9' }, { id: 'B', name: 'Suma 11' }], {
+    daysConfig: [{ date: '2026-11-07', startTime: '10:00', endTime: '23:00', phase: 'todas' }], matchDurationMin: 60, courts: [{ id: 'c1' }, { id: 'c2' }], categoryIds: ['A', 'B'], multiCategoryRestMin: 60
+  });
+  assert.equal(res.unscheduled, 0);
+  const hours = res.matches.filter(m => /Rolo/.test(m.p1_name + m.p2_name)).map(m => Number(m.match_time.slice(0, 2))).sort((x, y) => x - y);
+  hours.forEach((h, i) => i && assert.ok(h - hours[i - 1] >= 2, `Rolo sin descanso: ${hours}`));
+  // Los que juegan una sola categoría pueden jugar seguidos
+  const b1 = res.matches.filter(m => /B1/.test(m.p1_name + m.p2_name));
+  assert.equal(b1.length, 3);
+});

@@ -17,6 +17,8 @@ import { toLocalDateString, addDays, formatMatchSchedule } from "../lib/format";
 const MIN_AMERICANO_PAIRS = 3;
 // Un jugador juega como máximo 2 partidos seguidos; después descansa al menos un turno
 const MAX_CONSECUTIVE = 2;
+// Quien juega en dos categorías descansa al menos un turno entre partidos
+const MULTI_CATEGORY_REST_MIN = 60;
 // Tradicional: cantidad exacta de parejas (con impar, un BYE en cada uno de los dos partidos de zona)
 const BRACKET_SIZES = Array.from({ length: 29 }, (_, i) => i + 4);
 
@@ -751,7 +753,7 @@ export default function TournamentApp({ initialCategories }) {
     let missing = 0;
     const config = cascadeConfig(fresh, courts);
     if (config && fresh.some(m => m.category_id === categoryId && m.match_date)) {
-      const { changed, unscheduled } = generateGlobalSchedule(fresh, categories, { ...config, categoryIds: [categoryId], keepExisting: true, unavailable, featuredCourtId, maxConsecutive: MAX_CONSECUTIVE });
+      const { changed, unscheduled } = generateGlobalSchedule(fresh, categories, { ...config, categoryIds: [categoryId], keepExisting: true, unavailable, featuredCourtId, maxConsecutive: MAX_CONSECUTIVE, multiCategoryRestMin: MULTI_CATEGORY_REST_MIN });
       await Promise.all(changed.map(m => updateMatch(m.id, { match_date: m.match_date, match_time: m.match_time, court_id: m.court_id })));
       fresh = await getMatches();
       missing = unscheduled;
@@ -768,7 +770,7 @@ export default function TournamentApp({ initialCategories }) {
     if (config.daysConfig.length === 0) return showToast("Agrega al menos un día de competencia.", "error");
     const invalidDay = config.daysConfig.find(d => !d.date || d.endTime === d.startTime);
     if (invalidDay) return showToast("Cada día necesita fecha y horarios de inicio y cierre distintos.", "error");
-    const { matches: scheduled, changed, unscheduled, summary } = generateGlobalSchedule(matches, categories, { ...config, unavailable, featuredCourtId, maxConsecutive: MAX_CONSECUTIVE });
+    const { matches: scheduled, changed, unscheduled, summary } = generateGlobalSchedule(matches, categories, { ...config, unavailable, featuredCourtId, maxConsecutive: MAX_CONSECUTIVE, multiCategoryRestMin: MULTI_CATEGORY_REST_MIN });
     if (scheduled.length === 0) return showToast("No hay partidos pendientes de programar en esas categorías.", "error");
 
     const lines = categories

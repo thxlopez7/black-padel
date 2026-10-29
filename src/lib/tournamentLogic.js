@@ -782,6 +782,7 @@ export function categoryLevel(name = '') {
  *   Si una instancia no entra en sus jornadas, usa el primer turno libre de otra (summary.outOfPhase).
  * - Un cierre menor o igual al inicio (ej. 19:00 a 00:00) termina al día siguiente.
  * - config.unavailable: franjas en las que una pareja no puede jugar (ver unavailableWindow).
+ * - config.multiCategoryRestMin: descanso mínimo entre partidos de quien juega en dos o más categorías.
  * - config.maxConsecutive: máximo de partidos seguidos de un jugador (sin descanso entre medio).
  * - config.featuredCourtId: cancha principal; a la misma hora la usa la mejor categoría.
  * - config.pinnedIds: partidos con horario pedido por el organizador; se respetan y el resto se acomoda
@@ -843,8 +844,13 @@ export function generateGlobalSchedule(allMatches, categories, config) {
     for (let t = start + durationMs; times.has(t); t += durationMs) run++;
     return run > maxConsecutive;
   };
+  // Quien juega en dos o más categorías descansa al menos config.multiCategoryRestMin entre partidos
+  const multiCategory = new Set([...categoryPlayers.values()].flatMap(set => [...set])
+    .filter(p => [...categoryPlayers.values()].filter(set => set.has(p)).length > 1));
+  const multiGapMs = durationMs + Math.max(restMs, Number(config.multiCategoryRestMin || 0) * 60000);
   const playersFree = (list, start) => list.every(({ p, maybe, cat }) => (busy.get(p) || []).every(b =>
-    Math.abs(b.start - start) >= gapMs || (b.cat === cat && (b.maybe || maybe))) && (maybe || !tooManyInARow(p, start)));
+    Math.abs(b.start - start) >= (multiCategory.has(p) && !maybe && !b.maybe ? multiGapMs : gapMs) || (b.cat === cat && (b.maybe || maybe)))
+    && (maybe || !tooManyInARow(p, start)));
 
   // Turnos disponibles por jornada
   const windows = daysConfig.map((day, i) => {
