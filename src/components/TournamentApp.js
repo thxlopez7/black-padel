@@ -15,6 +15,8 @@ import { PromptModal, Toast } from "./UIComponents";
 import { toLocalDateString, addDays, formatMatchSchedule } from "../lib/format";
 
 const MIN_AMERICANO_PAIRS = 3;
+// Un jugador juega como máximo 2 partidos seguidos; después descansa al menos un turno
+const MAX_CONSECUTIVE = 2;
 // Tradicional: cantidad exacta de parejas (con impar, un BYE en cada uno de los dos partidos de zona)
 const BRACKET_SIZES = Array.from({ length: 29 }, (_, i) => i + 4);
 
@@ -30,10 +32,10 @@ function nextWeekday(weekday) {
   return toLocalDateString(new Date(today.getFullYear(), today.getMonth(), today.getDate() + ((weekday - today.getDay() + 7) % 7)));
 }
 
-// Viernes de noche con pocos partidos (el fuerte es el sábado), sábado completo para grupos y
+// Viernes de noche con 4 partidos por cancha (el fuerte es el sábado), sábado completo para grupos y
 // domingo con semifinales a la mañana y finales a la tarde
 const weekendTemplate = (friday) => [
-  { date: friday, startTime: '19:00', endTime: '00:00', phase: 'grupos', maxMatches: 6 },
+  { date: friday, startTime: '19:00', endTime: '00:00', phase: 'grupos', maxMatches: 12 },
   { date: addDays(friday, 1), startTime: '10:00', endTime: '00:00', phase: 'grupos', maxMatches: '' },
   { date: addDays(friday, 2), startTime: '11:00', endTime: '15:00', phase: 'semis', maxMatches: '' },
   { date: addDays(friday, 2), startTime: '15:00', endTime: '19:00', phase: 'finals', maxMatches: '' }
@@ -749,7 +751,7 @@ export default function TournamentApp({ initialCategories }) {
     let missing = 0;
     const config = cascadeConfig(fresh, courts);
     if (config && fresh.some(m => m.category_id === categoryId && m.match_date)) {
-      const { changed, unscheduled } = generateGlobalSchedule(fresh, categories, { ...config, categoryIds: [categoryId], keepExisting: true, unavailable, featuredCourtId });
+      const { changed, unscheduled } = generateGlobalSchedule(fresh, categories, { ...config, categoryIds: [categoryId], keepExisting: true, unavailable, featuredCourtId, maxConsecutive: MAX_CONSECUTIVE });
       await Promise.all(changed.map(m => updateMatch(m.id, { match_date: m.match_date, match_time: m.match_time, court_id: m.court_id })));
       fresh = await getMatches();
       missing = unscheduled;
@@ -766,7 +768,7 @@ export default function TournamentApp({ initialCategories }) {
     if (config.daysConfig.length === 0) return showToast("Agrega al menos un día de competencia.", "error");
     const invalidDay = config.daysConfig.find(d => !d.date || d.endTime === d.startTime);
     if (invalidDay) return showToast("Cada día necesita fecha y horarios de inicio y cierre distintos.", "error");
-    const { matches: scheduled, changed, unscheduled, summary } = generateGlobalSchedule(matches, categories, { ...config, unavailable, featuredCourtId });
+    const { matches: scheduled, changed, unscheduled, summary } = generateGlobalSchedule(matches, categories, { ...config, unavailable, featuredCourtId, maxConsecutive: MAX_CONSECUTIVE });
     if (scheduled.length === 0) return showToast("No hay partidos pendientes de programar en esas categorías.", "error");
 
     const lines = categories
