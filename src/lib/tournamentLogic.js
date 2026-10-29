@@ -1,9 +1,9 @@
 export const POINTS_PER_WIN = 3;
 
-// Semifinales del americano: posiciones de la tabla que se cruzan
+// Semifinales del americano: 1º contra 4º y 2º contra 3º de la tabla
 export const AMERICANO_SEMIS = [
-  { name: 'Semifinal 1', seeds: [1, 2] },
-  { name: 'Semifinal 2', seeds: [3, 4] }
+  { name: 'Semifinal 1', seeds: [1, 4] },
+  { name: 'Semifinal 2', seeds: [2, 3] }
 ];
 const AMERICANO_PLAYOFF = ['AMERICANO_SEMI', 'AMERICANO_FINAL'];
 
@@ -38,7 +38,141 @@ function getRoundNames(numRounds) {
   return ['Ronda 1', 'Ronda 2', 'Ronda 3', 'Ronda 4', 'Ronda 5'];
 }
 
-export function generateTournamentMatches(categoryId, numPairs, pairsList, isRandom) {
+function getRoundNamesFor(numRounds) {
+  if (numRounds === 1) return ['Final'];
+  if (numRounds === 2) return ['Semis', 'Final'];
+  return getRoundNames(numRounds);
+}
+
+// Tamaño del cuadro (potencia de 2) que admite a todas las parejas
+export const bracketSizeFor = (count) => {
+  let size = 2;
+  while (size < count) size *= 2;
+  return size;
+};
+
+// Orden de cabezas de serie en el cuadro (1 y 2 solo se cruzan en la final): 8 -> [1, 8, 4, 5, 2, 7, 3, 6]
+export function seedPositions(size) {
+  let order = [1];
+  while (order.length < size) {
+    const n = order.length * 2;
+    order = order.flatMap(s => [s, n + 1 - s]);
+  }
+  return order;
+}
+const seedLabel = (n) => `${n}º Clasificado`;
+
+/**
+ * Cuadro tradicional con dos partidos de zona:
+ * - 1º partido (ZONE): las parejas se enfrentan de a dos. Con cantidad impar, una pareja tiene BYE.
+ * - 2º partido (CROSS): ganador de una zona contra perdedor de otra. La pareja que tuvo BYE juega
+ *   sí o sí este partido; con cantidad impar sobra un ganador, que tiene BYE en esta ronda.
+ * - Cuadro (BRACKET): pasa el ganador de cada 2º partido (una pareja por cruce); quien lo pierde queda
+ *   afuera aunque haya ganado el 1º. Se ordenan por partidos ganados (un BYE cuenta como ganado) y,
+ *   con los mismos ganados, por sorteo; los primeros reciben los pases directos del cuadro.
+ * - options.cross === false: formato anterior (un partido de zona y pasan las dos parejas).
+ */
+export function generateTournamentMatches(categoryId, numPairs, pairsList, isRandom, options = {}) {
+  if (options.cross === false) return generateLegacyMatches(categoryId, numPairs, pairsList, isRandom);
+  let pairs = pairsList.filter(p => p && p !== 'BYE');
+  if (pairs.length < 4) throw new Error('El formato tradicional necesita al menos 4 parejas.');
+  if (isRandom) {
+    for (let i = pairs.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pairs[i], pairs[j]] = [pairs[j], pairs[i]];
+    }
+  }
+  const numZones = Math.ceil(pairs.length / 2);
+  const generatedMatches = [];
+  for (let i = 0; i < numZones; i++) {
+    const p1 = pairs[i * 2];
+    const p2 = pairs[i * 2 + 1] ?? 'BYE';
+    generatedMatches.push({
+      category_id: categoryId, match_type: 'ZONE', round_name: 'ZONA ' + ALPHABET[i], round_index: 0, match_index: i,
+      p1_name: p1, p2_name: p2, winner: null, is_wo: false, is_bye: p2 === 'BYE'
+    });
+  }
+  for (let i = 0; i < numZones; i++) {
+    generatedMatches.push({
+      category_id: categoryId, match_type: 'CROSS', round_name: 'CRUCE ' + (i + 1), round_index: 1, match_index: i,
+      p1_name: null, p2_name: null, is_bye: false
+    });
+  }
+  generatedMatches.push(...bracketRows(categoryId, bracketSizeFor(numZones)));
+  return { pairs, generatedMatches: resolveGenerated(generatedMatches) };
+}
+
+// Filas vacías del cuadro para "size" lugares, desde la ronda 2 (después de zona y cruce)
+function bracketRows(categoryId, size) {
+  const numRounds = Math.log2(size);
+  const names = getRoundNamesFor(numRounds);
+  const rows = [];
+  for (let r = 0, count = size / 2; count >= 1; r++, count /= 2) {
+    for (let i = 0; i < count; i++) {
+      rows.push({
+        category_id: categoryId, match_type: 'BRACKET', round_name: `${names[r]}${count > 1 ? ' ' + ALPHABET[i] : ''}`,
+        round_index: r + 2, match_index: i, p1_name: null, p2_name: null, is_bye: false
+      });
+    }
+  }
+  return rows;
+}
+
+/**
+ * Cruces del 2º partido a partir de las zonas (lista de [p1, p2] en el orden de los partidos CROSS).
+ * Primero cada pareja que tuvo BYE contra un perdedor; después ganador de la zona q-1 contra perdedor
+ * de la zona q (nunca la misma zona); los ganadores que sobran tienen BYE.
+ */
+function crossPairings(zones) {
+  const label = (z, i, place) => {
+    if (!z.winner) return `Zona ${ALPHABET[i]} ${place}º`;
+    if (place === 1) return z.winner;
+    return z.winner === z.p1_name ? z.p2_name : z.p1_name;
+  };
+  const real = [], byeWinners = [];
+  zones.forEach((z, i) => {
+    const hasBye = z.p1_name === 'BYE' || z.p2_name === 'BYE';
+    if (!hasBye) real.push({ w: label(z, i, 1), l: label(z, i, 2) });
+    else if (z.p1_name !== 'BYE' || z.p2_name !== 'BYE') byeWinners.push(z.p1_name === 'BYE' ? z.p2_name : z.p1_name);
+  });
+  const m = real.length;
+  const pairings = [];
+  const usedWinners = new Set();
+  byeWinners.forEach((b, j) => pairings.push([b, j < m ? real[j].l : 'BYE']));
+  for (let q = byeWinners.length; q < m; q++) {
+    const wi = (q - 1 + m) % m;
+    usedWinners.add(wi);
+    pairings.push([real[wi].w, real[q].l]);
+  }
+  real.forEach((r, i) => { if (!usedWinners.has(i)) pairings.push([r.w, 'BYE']); });
+  return pairings;
+}
+
+// Número fijo por pareja para el sorteo de desempate: siempre da lo mismo para la misma pareja y categoría,
+// así el cuadro no cambia cada vez que se recalcula
+function drawNumber(text) {
+  let h = 2166136261;
+  for (const ch of text) h = Math.imul(h ^ ch.codePointAt(0), 16777619);
+  return h >>> 0;
+}
+
+/**
+ * Clasificados al cuadro: el ganador de cada 2º partido, ordenados solo por partidos ganados en zona
+ * (2 antes que 1; un BYE cuenta como ganado). Entre parejas con los mismos ganados decide un sorteo fijo.
+ * Los primeros reciben los pases directos del cuadro.
+ */
+export function crossQualifiers(zones, crosses) {
+  const wins = new Map();
+  [...zones, ...crosses].forEach(m => {
+    if (m.winner && m.winner !== 'BYE') wins.set(m.winner, (wins.get(m.winner) || 0) + 1);
+  });
+  const salt = crosses[0]?.category_id || '';
+  return [...new Set(crosses.map(c => c.winner).filter(w => w && w !== 'BYE'))]
+    .map(name => ({ name, wins: wins.get(name) || 0, draw: drawNumber(`${salt}|${normalizePairName(name).toLowerCase()}`) }))
+    .sort((a, b) => b.wins - a.wins || a.draw - b.draw);
+}
+
+function generateLegacyMatches(categoryId, numPairs, pairsList, isRandom) {
   if (!BRACKET_MAPS[numPairs]) {
     throw new Error(`No existe un cuadro definido para ${numPairs} parejas.`);
   }
@@ -200,7 +334,7 @@ export function generateAmericanoMatches(categoryId, numPairs, pairsList, isRand
     current = [fixed, last, ...rest];
   }
 
-  // Fase final: con 4 o más parejas, semifinales 1º vs 2º y 3º vs 4º y final entre los ganadores;
+  // Fase final: con 4 o más parejas, semifinales 1º vs 4º y 2º vs 3º y final entre los ganadores;
   // con 3 parejas, final directa 1º vs 2º (puede desactivarse con withFinal: false)
   if (options.withFinal !== false) {
     const playoff = (type, round, name, p1, p2) => generatedMatches.push({
@@ -209,8 +343,7 @@ export function generateAmericanoMatches(categoryId, numPairs, pairsList, isRand
       p1_score: ['', '', ''], p2_score: ['', '', '']
     });
     if (pairs.length >= 4) {
-      playoff('AMERICANO_SEMI', totalRounds, AMERICANO_SEMIS[0].name, '1º Tabla Americano', '2º Tabla Americano');
-      playoff('AMERICANO_SEMI', totalRounds, AMERICANO_SEMIS[1].name, '3º Tabla Americano', '4º Tabla Americano');
+      AMERICANO_SEMIS.forEach(({ name, seeds }) => playoff('AMERICANO_SEMI', totalRounds, name, `${seeds[0]}º Tabla Americano`, `${seeds[1]}º Tabla Americano`));
       playoff('AMERICANO_FINAL', totalRounds + 1, 'Final', `Ganador ${AMERICANO_SEMIS[0].name}`, `Ganador ${AMERICANO_SEMIS[1].name}`);
     } else {
       playoff('AMERICANO_FINAL', totalRounds, 'Final', '1º Tabla Americano', '2º Tabla Americano');
@@ -343,7 +476,7 @@ export function calculateAmericanoStandings(pairsList, matches) {
   }));
 }
 
-const isPlaceholder = (name) => !name || name === 'BYE' || /^Zona [A-Z]+ [12]º$/.test(name) || name.includes('Tabla Americano') || name.startsWith('Ganador ');
+export const isPlaceholder = (name) => !name || name === 'BYE' || /^Zona [A-Z]+ [12]º$/.test(name) || /^\d+º( o \d+º)? Clasificado$/.test(name) || name.includes('Tabla Americano') || name.startsWith('Ganador ');
 
 /**
  * Determina el ganador de un partido a partir del marcador por sets.
@@ -376,7 +509,7 @@ const EMPTY_RESULT = { winner: null, is_wo: false, p1_score: ['', '', ''], p2_sc
 /**
  * Recalcula de forma determinística los cruces derivados de una categoría:
  * - Tradicional: nombres del cuadro a partir de las zonas y rondas previas, BYE automáticos.
- * - Americano: semifinalistas (1º-2º y 3º-4º) al terminar las fechas y finalistas al cerrarse las semis.
+ * - Americano: semifinalistas (1º-4º y 2º-3º) al terminar las fechas y finalistas al cerrarse las semis.
  * Si los participantes de un partido cambian, su resultado anterior se invalida.
  * Devuelve la lista de { matchId, updates } con los cambios necesarios.
  */
@@ -408,6 +541,8 @@ export function resolveCategoryMatches(catMatches) {
     return true;
   };
   const assignPair = (m, p1, p2) => {
+    // Parejas fijadas a mano por el organizador: la cascada no las reemplaza
+    if (m.manual_pairs) [p1, p2] = [m.p1_name, m.p2_name];
     const participantsChanged = m.p1_name !== p1 || m.p2_name !== p2;
     setFields(m, { p1_name: p1, p2_name: p2 });
     if (applyBye(m, p1, p2)) return;
@@ -441,34 +576,68 @@ export function resolveCategoryMatches(catMatches) {
   zones.forEach(z => {
     if (!applyBye(z, z.p1_name, z.p2_name) && z.winner && z.winner !== z.p1_name && z.winner !== z.p2_name) setFields(z, EMPTY_RESULT);
   });
-  const bracket = all.filter(m => m.match_type === 'BRACKET');
-  const template = BRACKET_MAPS[zones.length * 2];
-  if (zones.length > 0 && bracket.length > 0 && template) {
-    const zoneResult = {};
-    zones.forEach((z, i) => {
-      const letter = ALPHABET[i];
-      if (z.winner) {
-        const loser = z.winner === z.p1_name ? z.p2_name : z.p1_name;
-        zoneResult[`W${letter}`] = z.winner;
-        zoneResult[`L${letter}`] = z.winner === 'BYE' ? 'BYE' : loser;
-      } else {
-        zoneResult[`W${letter}`] = `Zona ${letter} 1º`;
-        zoneResult[`L${letter}`] = `Zona ${letter} 2º`;
-      }
-    });
-    const fromCode = (code) => (code === 'BYE' ? 'BYE' : zoneResult[code]);
+  const zoneResult = {};
+  zones.forEach((z, i) => {
+    const letter = ALPHABET[i];
+    if (z.winner) {
+      const loser = z.winner === z.p1_name ? z.p2_name : z.p1_name;
+      zoneResult[`W${letter}`] = z.winner;
+      zoneResult[`L${letter}`] = z.winner === 'BYE' ? 'BYE' : loser;
+    } else {
+      zoneResult[`W${letter}`] = `Zona ${letter} 1º`;
+      zoneResult[`L${letter}`] = `Zona ${letter} 2º`;
+    }
+  });
 
+  const bracket = all.filter(m => m.match_type === 'BRACKET');
+  const firstRound = bracket.length > 0 ? Math.min(...bracket.map(m => m.round_index)) : 0;
+  const crosses = all.filter(m => m.match_type === 'CROSS').sort((a, b) => a.match_index - b.match_index);
+  let firstRoundPair = null;
+
+  if (crosses.length > 0) {
+    // --- 2º partido: cruces ganador/perdedor y clasificados al cuadro ---
+    crossPairings(zones).forEach(([p1, p2], i) => crosses[i] && assignPair(crosses[i], p1, p2));
+    const decided = crosses.every(c => c.winner);
+    const seeds = decided ? crossQualifiers(zones, crosses).map(s => s.name) : [];
+    const size = bracket.filter(m => m.round_index === firstRound).length * 2;
+    const order = seedPositions(size);
+    // Antes de terminar los cruces, los lugares muestran "Nº Clasificado"; los que sobran son pases libres
+    const maxSeeds = decided ? seeds.length : crosses.length;
+    const slot = (pos) => (pos > maxSeeds ? 'BYE' : decided ? seeds[pos - 1] : seedLabel(pos));
+    firstRoundPair = (m) => [slot(order[m.match_index * 2]), slot(order[m.match_index * 2 + 1])];
+  } else {
+    // --- Formato anterior: Zonas -> Cuadro con plantilla fija ---
+    const template = BRACKET_MAPS[zones.length * 2];
+    if (template) {
+      const fromCode = (code) => (code === 'BYE' ? 'BYE' : zoneResult[code]);
+      firstRoundPair = (m) => [fromCode(template[m.match_index * 2]), fromCode(template[m.match_index * 2 + 1])];
+    }
+  }
+
+  // Quién sale de un partido del cuadro. Con dos partidos de zona, mientras no hay ganador se muestra quién puede
+  // llegar ("1º Clasificado" si su rival es BYE, "8º o 9º Clasificado" si se cruzan dos clasificados)
+  const seedOf = (name) => name?.match(/^(\d+)º Clasificado$/)?.[1];
+  const advancing = (src) => {
+    if (!src) return null;
+    if (src.winner || crosses.length === 0) return src.winner || null;
+    if (src.p2_name === 'BYE' && isPlaceholder(src.p1_name) && src.p1_name !== 'BYE') return src.p1_name;
+    if (src.p1_name === 'BYE' && isPlaceholder(src.p2_name) && src.p2_name !== 'BYE') return src.p2_name;
+    const [a, b] = [seedOf(src.p1_name), seedOf(src.p2_name)];
+    return a && b ? `${a}º o ${b}º Clasificado` : null;
+  };
+
+  if (zones.length > 0 && bracket.length > 0 && firstRoundPair) {
     const maxRound = Math.max(...bracket.map(m => m.round_index));
-    for (let r = 1; r <= maxRound; r++) {
+    for (let r = firstRound; r <= maxRound; r++) {
       const roundMatches = bracket.filter(m => m.round_index === r).sort((a, b) => a.match_index - b.match_index);
       const prev = bracket.filter(m => m.round_index === r - 1);
       roundMatches.forEach(m => {
-        if (r === 1) {
-          assignPair(m, fromCode(template[m.match_index * 2]), fromCode(template[m.match_index * 2 + 1]));
+        if (r === firstRound) {
+          assignPair(m, ...firstRoundPair(m));
         } else {
           const src1 = prev.find(x => x.match_index === m.match_index * 2);
           const src2 = prev.find(x => x.match_index === m.match_index * 2 + 1);
-          assignPair(m, src1?.winner || null, src2?.winner || null);
+          assignPair(m, advancing(src1), advancing(src2));
         }
       });
     }
@@ -636,7 +805,7 @@ export function generateGlobalSchedule(allMatches, categories, config) {
   };
   fixed.filter(m => selected.has(m.category_id)).forEach(m => markRoundEnd(m, slotStart(m.match_date, m.match_time)));
   const earliestStart = (m) => {
-    if (m.match_type !== 'BRACKET' && !AMERICANO_PLAYOFF.includes(m.match_type)) return 0;
+    if (m.match_type !== 'BRACKET' && m.match_type !== 'CROSS' && !AMERICANO_PLAYOFF.includes(m.match_type)) return 0;
     let min = 0;
     for (const [key, end] of roundEnd) {
       const [catId, round] = key.split('::');
@@ -819,7 +988,7 @@ function addToTraditional(catMatches, name, categoryId) {
       inserts: [],
       updates: [{ matchId: byeZone.id, updates: zoneUpdate }, ...cascade],
       deleteIds: [],
-      numPairs: zones.length * 2,
+      numPairs: catMatches.some(m => m.match_type === 'CROSS') ? realPairs + 1 : zones.length * 2,
       notes: [
         `Entra en la ${byeZone.round_name}.`,
         ...(invalidated ? [`Se borran ${invalidated} resultados del cuadro.`] : [])
@@ -827,11 +996,13 @@ function addToTraditional(catMatches, name, categoryId) {
     };
   }
 
-  // 2) Cuadro completo: se agrega una zona y se reconstruye el cuadro al tamaño siguiente
+  // 2) Cuadro completo: se agrega una zona y se reconstruye el cuadro al tamaño siguiente.
+  // Con cruce, las zonas tienen que ser pares y el armado cambia entero: hay que volver a sortear.
+  if (catMatches.some(m => m.match_type === 'CROSS')) return addZoneWithCross(catMatches, zones, oldBracket, name, categoryId, realPairs);
   const newSize = zones.length * 2 + 2;
   if (!BRACKET_MAPS[newSize]) return { error: `No existe un cuadro para ${newSize} parejas.` };
   const pairList = [...zones.flatMap(z => [z.p1_name, z.p2_name]), name, 'BYE'];
-  const fresh = generateTournamentMatches(categoryId, newSize, pairList, false).generatedMatches;
+  const fresh = generateTournamentMatches(categoryId, newSize, pairList, false, { cross: false }).generatedMatches;
   const newZone = fresh.find(m => m.match_type === 'ZONE' && m.match_index === zones.length);
   const newBracket = fresh.filter(m => m.match_type === 'BRACKET').map((m, i) => ({ ...m, id: `new-${i}`, match_date: null, match_time: null, court_id: null }));
 
@@ -868,6 +1039,43 @@ function addToTraditional(catMatches, name, categoryId) {
     notes: [
       `Nueva ${newZone.round_name}. El cuadro pasa a ${realPairs + 1} parejas.`,
       ...(lost > 0 ? [`Se borran ${lost} resultados del cuadro.`] : [])
+    ]
+  };
+}
+
+// Formato con cruce y cantidad par: la pareja nueva entra en una zona nueva con BYE (y su cruce).
+// Si el cuadro queda chico se rehace al tamaño siguiente, siempre que todavía no tenga resultados.
+function addZoneWithCross(catMatches, zones, oldBracket, name, categoryId, realPairs) {
+  const crosses = catMatches.filter(m => m.match_type === 'CROSS');
+  const size = oldBracket.filter(m => m.round_index === Math.min(...oldBracket.map(b => b.round_index))).length * 2;
+  const newSize = bracketSizeFor(zones.length + 1);
+  const rebuild = newSize > size;
+  if (rebuild && oldBracket.some(m => m.winner && !m.is_bye)) {
+    return { error: 'El cuadro ya tiene resultados y no tiene lugar para otra pareja.' };
+  }
+  const i = zones.length;
+  const inserts = [
+    { category_id: categoryId, match_type: 'ZONE', round_name: 'ZONA ' + ALPHABET[i], round_index: 0, match_index: i, p1_name: name, p2_name: 'BYE', is_bye: true },
+    { category_id: categoryId, match_type: 'CROSS', round_name: 'CRUCE ' + (crosses.length + 1), round_index: 1, match_index: crosses.length, p1_name: null, p2_name: null, is_bye: false },
+    ...(rebuild ? bracketRows(categoryId, newSize) : [])
+  ].map((m, k) => ({ ...EMPTY_RESULT, ...m, id: `new-${k}` }));
+  const working = [...catMatches.filter(m => !(rebuild && m.match_type === 'BRACKET')).map(m => ({ ...m })), ...inserts];
+  const changes = resolveCategoryMatches(working);
+  changes.forEach(({ matchId, updates }) => Object.assign(working.find(m => m.id === matchId), updates));
+  const strip = ({ id: _id, ...rest }) => rest;
+  const invalidated = changes.filter(c => {
+    const m = catMatches.find(x => x.id === c.matchId);
+    return m?.winner && !m.is_bye && 'winner' in c.updates && !c.updates.winner;
+  }).length;
+  return {
+    inserts: working.filter(m => String(m.id).startsWith('new-')).map(strip),
+    updates: changes.filter(c => !String(c.matchId).startsWith('new-')),
+    deleteIds: rebuild ? oldBracket.map(m => m.id) : [],
+    numPairs: realPairs + 1,
+    notes: [
+      `Nueva ZONA ${ALPHABET[i]} (con BYE).`,
+      ...(rebuild ? [`El cuadro pasa a ${newSize} lugares.`] : []),
+      ...(invalidated ? [`Se borran ${invalidated} resultados de cruces.`] : [])
     ]
   };
 }

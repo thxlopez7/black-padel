@@ -19,7 +19,7 @@ const play = (m, winnerSide = 1) => Object.assign(m, {
 const build = (count) => {
   const size = count % 2 ? count + 1 : count;
   const pairs = [...Array.from({ length: count }, (_, i) => `P${i + 1} & Q${i + 1}`), ...(count % 2 ? ['BYE'] : [])];
-  return withIds(L.generateTournamentMatches('C', size, pairs, false).generatedMatches);
+  return withIds(L.generateTournamentMatches('C', size, pairs, false, { cross: false }).generatedMatches);
 };
 
 // Juega todo el torneo ronda por ronda y verifica que haya un campeón real
@@ -142,7 +142,7 @@ test('americano: semifinales, final, correcciones y W.O.', () => {
   const st = L.calculateAmericanoStandings(pairs, regular);
   const s1 = all.find(m => m.round_name === 'Semifinal 1');
   const s2 = all.find(m => m.round_name === 'Semifinal 2');
-  assert.deepEqual([s1.p1_name, s1.p2_name, s2.p1_name, s2.p2_name], st.slice(0, 4).map(s => s.name));
+  assert.deepEqual([s1.p1_name, s1.p2_name, s2.p1_name, s2.p2_name], [0, 3, 1, 2].map(i => st[i].name));
   assert.ok(![s1, s2].some(m => [m.p1_name, m.p2_name].includes(st[4].name)), 'el 5º queda eliminado');
   play(s1, 2); play(s2, 1);
   resolve(all);

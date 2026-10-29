@@ -13,22 +13,23 @@ export default function BracketView({ category, allMatches, courts, mode, onBack
   
   // Agrupar
   const zones = matches.filter(m => m.match_type === 'ZONE').sort((a, b) => a.match_index - b.match_index);
+  const crosses = matches.filter(m => m.match_type === 'CROSS').sort((a, b) => a.match_index - b.match_index);
   const bracketMatches = matches.filter(m => m.match_type === 'BRACKET');
   
-  // Agrupar bracket por rondas
-  const bracketByRound = [];
-  let maxRound = 0;
-  bracketMatches.forEach(m => {
-    if (m.round_index > maxRound) maxRound = m.round_index;
-  });
-  for(let i = 1; i <= maxRound; i++) {
-    bracketByRound.push(bracketMatches.filter(m => m.round_index === i).sort((a, b) => a.match_index - b.match_index));
-  }
+  // Agrupar bracket por rondas (con cruce, el cuadro empieza en la ronda 2)
+  const bracketByRound = [...new Set(bracketMatches.map(m => m.round_index))]
+    .sort((a, b) => a - b)
+    .map(r => bracketMatches.filter(m => m.round_index === r).sort((a, b) => a.match_index - b.match_index))
+    // Una ronda donde todos pasan por BYE (menos clasificados que lugares) no se muestra
+    .filter(round => !round.every(m => m.is_bye));
 
-
+  // El cuadro se muestra completo desde el sorteo; los nombres avanzan a medida que se cargan resultados
+  const visibleRounds = bracketByRound;
+  // Con dos partidos de zona, quien pasa directo aparece en la ronda siguiente: no se muestran partidos contra BYE
+  const hideByeCards = crosses.length > 0;
 
   const renderChampion = () => {
-    const finalRound = bracketByRound[bracketByRound.length - 1];
+    const finalRound = visibleRounds[visibleRounds.length - 1];
     if (finalRound && finalRound.length > 0) {
       const finalMatch = finalRound[0];
       if (finalMatch.winner && finalMatch.winner !== 'BYE') {
@@ -66,11 +67,18 @@ export default function BracketView({ category, allMatches, courts, mode, onBack
             </div>
           )}
 
+          {/* CRUCE: 2º partido de zona */}
+          {crosses.length > 0 && (
+            <div className="flex flex-col justify-center gap-6 relative min-w-[280px]">
+              {crosses.map(m => <MatchCard key={m.id} match={m} courts={courts} mode={mode} onEdit={setEditingMatch} />)}
+            </div>
+          )}
+
           {/* BRACKET */}
-          {bracketByRound.map((round, rIndex) => (
+          {visibleRounds.map((round, rIndex) => (
             <div key={rIndex} className="flex flex-col justify-center gap-6 relative min-w-[280px]">
-              {round.map(m => <MatchCard key={m.id} match={m} courts={courts} mode={mode} onEdit={setEditingMatch} />)}
-              {rIndex === bracketByRound.length - 1 && renderChampion()}
+              {round.filter(m => !(hideByeCards && m.is_bye)).map(m => <MatchCard key={m.id} match={m} courts={courts} mode={mode} onEdit={setEditingMatch} />)}
+              {rIndex === visibleRounds.length - 1 && renderChampion()}
             </div>
           ))}
 

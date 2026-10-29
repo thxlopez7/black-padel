@@ -15,7 +15,7 @@ const snapshot = (list) => JSON.stringify(list);
 
 // La misma pareja inscripta en dos categorías (tradicional y americano) y nombres repetidos entre categorías
 const shared = 'Juan Perez & Luis Gomez';
-const trad = () => withIds(L.generateTournamentMatches('T', 6, [shared, 'A & B', 'C & D', 'E & F', 'G & H', 'BYE'], false).generatedMatches);
+const trad = () => withIds(L.generateTournamentMatches('T', 6, [shared, 'A & B', 'C & D', 'E & F', 'G & H', 'BYE'], false, { cross: false }).generatedMatches);
 const amer = () => withIds(L.generateAmericanoMatches('M', 5, [shared, 'A & B', 'X & Y', 'Z & W', 'K & J'], false).generatedMatches);
 
 test('resolver con partidos mezclados nunca cruza categorías', () => {

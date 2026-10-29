@@ -3,10 +3,10 @@
 import { PairName } from "./UIComponents";
 import { useState, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { winnerFromScore, checkMatchEdit } from "../lib/tournamentLogic";
+import { winnerFromScore, checkMatchEdit, isPlaceholder } from "../lib/tournamentLogic";
 
 // Lugares del cuadro que todavía no tienen pareja definida
-const isPlaceholderName = (n) => !n || n === 'BYE' || /^Zona [A-Z]+ [12]º$/.test(n) || n.includes('Tabla Americano') || n.startsWith('Ganador ');
+const isPlaceholderName = isPlaceholder;
 import { formatTime } from "../lib/format";
 
 const EMPTY_SCORE = ['', '', ''];
@@ -26,24 +26,36 @@ export default function MatchEditorModal({ match, courts, allMatches = [], onClo
   const [p2Name, setP2Name] = useState(match.p2_name);
   const [confirmedWarnings, setConfirmedWarnings] = useState('');
 
-  // Cruces modificables: fechas del americano sin jugar y zonas del tradicional (con pase libre)
+  // Todos los cruces se pueden cambiar a mano. Zonas: intercambio entre zonas. Fechas del americano: sin jugar.
+  // 2º partido, cuadro, semis y final: la pareja elegida queda fijada y la cascada automática no la reemplaza.
   const isZone = match.match_type === 'ZONE';
-  const canEditPairs = (match.match_type === 'AMERICANO' && !match.winner) || isZone;
+  const isRegularAmericano = match.match_type === 'AMERICANO';
+  const isDerived = !isZone && !isRegularAmericano;
+  const canEditPairs = (isRegularAmericano && !match.winner) || isZone || isDerived;
+  const [manual, setManual] = useState(Boolean(match.manual_pairs));
   const categoryPairs = useMemo(() => {
+    const source = isRegularAmericano || match.match_type.startsWith('AMERICANO_') ? 'AMERICANO' : 'ZONE';
     const names = [...new Set(
       allMatches
-        .filter(m => m.category_id === match.category_id && m.match_type === match.match_type)
+        .filter(m => m.category_id === match.category_id && m.match_type === source)
         .flatMap(m => [m.p1_name, m.p2_name])
         .filter(n => n && n !== 'BYE')
     )].sort();
-    return isZone ? [...names, 'BYE'] : names;
-  }, [allMatches, match.category_id, match.match_type, isZone]);
+    const current = [match.p1_name, match.p2_name].filter(n => n && n !== 'BYE' && !names.includes(n));
+    return [...current, ...names, ...(source === 'ZONE' ? ['BYE'] : [])];
+  }, [allMatches, match.category_id, match.match_type, match.p1_name, match.p2_name, isRegularAmericano]);
+  const pickPair = (setter, value) => {
+    setter(value);
+    if (isDerived) setManual(true);
+    setError('');
+  };
   // El resultado solo se carga cuando ambos lados son parejas reales
   const canScore = !isPlaceholderName(p1Name) && !isPlaceholderName(p2Name);
 
   const edit = {
     p1_name: p1Name,
     p2_name: p2Name,
+    ...(isDerived ? { manual_pairs: manual } : {}),
     match_date: date || null,
     match_time: time || null,
     court_id: courtId || null
@@ -142,10 +154,17 @@ export default function MatchEditorModal({ match, courts, allMatches = [], onClo
               <label className="block text-[10px] text-gray-500 uppercase tracking-widest">Cruce</label>
               {isZone && <p className="text-[11px] text-gray-400">Elegí otra pareja y se intercambian.</p>}
               {[[p1Name, setP1Name], [p2Name, setP2Name]].map(([value, setter], i) => (
-                <select key={i} value={value || ""} onChange={e => { setter(e.target.value); setError(''); }} className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-xs text-white focus:border-red-600 outline-none">
+                <select key={i} value={value || ""} onChange={e => pickPair(setter, e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-xs text-white focus:border-red-600 outline-none">
+                  {!value && <option value="">A definir</option>}
                   {categoryPairs.map(p => <option key={p} value={p}>{p === 'BYE' ? 'Pase libre (BYE)' : p}</option>)}
                 </select>
               ))}
+              {isDerived && (
+                <label className="flex items-center gap-2 cursor-pointer pt-1">
+                  <input type="checkbox" checked={manual} onChange={e => { setManual(e.target.checked); if (!e.target.checked) { setP1Name(match.p1_name); setP2Name(match.p2_name); } }} className="w-4 h-4 rounded border-gray-700 bg-gray-900 accent-red-600" />
+                  <span className="text-[11px] text-gray-300">Cruce fijado a mano (desmarcar para volver al automático)</span>
+                </label>
+              )}
             </div>
           )}
 

@@ -13,7 +13,7 @@ assert.equal(L.winnerFromScore('A','B',['','',''],['','','']).winner,null);
 
 // Traditional 6 pairs with 1 empty -> BYE zone resolved at generation
 const pairs = ['A','B','C','D','E','BYE'];
-const { generatedMatches: g } = L.generateTournamentMatches('X', 6, pairs, false);
+const { generatedMatches: g } = L.generateTournamentMatches('X', 6, pairs, false, { cross: false });
 const zc = g.find(m=>m.round_name==='ZONA C');
 assert.equal(zc.winner,'E'); assert.equal(zc.is_wo,false);
 const r1 = g.filter(m=>m.match_type==='BRACKET'&&m.round_index===1);
@@ -21,7 +21,7 @@ assert.ok(r1.some(m=>m.p1_name==='E'||m.p2_name==='E'), 'E advanced into bracket
 
 // Two categories: zone result must not leak
 const X = withIds(g,'X');
-const Y = withIds(L.generateTournamentMatches('Y',6,['P','Q','R','S','T','U'],false).generatedMatches,'Y');
+const Y = withIds(L.generateTournamentMatches('Y',6,['P','Q','R','S','T','U'],false, { cross: false }).generatedMatches,'Y');
 const za = X.find(m=>m.round_name==='ZONA A'); za.winner='A';
 apply(X, L.resolveCategoryMatches(X));
 assert.ok(!Y.some(m=>m.p1_name==='A'||m.p2_name==='A'), 'no leak to Y');
@@ -31,7 +31,7 @@ za.winner='B'; apply(X, L.resolveCategoryMatches(X));
 assert.ok(X.some(m=>m.match_type==='BRACKET'&&m.p1_name==='B'));
 assert.ok(!X.some(m=>m.match_type==='BRACKET'&&(m.p1_name==='A'&&m.round_index===1&&m.match_index===0)));
 
-// Americano: semifinales 1º-2º y 3º-4º al terminar las fechas, final entre ganadores
+// Americano: semifinales 1º-4º y 2º-3º al terminar las fechas, final entre ganadores
 const am = withIds(L.generateAmericanoMatches('Z',5,['A','B','C','D','E'],false).generatedMatches,'Z');
 const reg = am.filter(m=>m.match_type==='AMERICANO');
 const semisOf = () => am.filter(m=>m.match_type==='AMERICANO_SEMI');
@@ -42,14 +42,14 @@ reg.forEach(m=>{ m.winner=m.p1_name; m.p1_score=['6','6','']; m.p2_score=['2','2
 apply(am, L.resolveCategoryMatches(am));
 const st = L.calculateAmericanoStandings(['A','B','C','D','E'], reg);
 const s1 = am.find(m=>m.round_name==='Semifinal 1'), s2 = am.find(m=>m.round_name==='Semifinal 2');
-assert.deepEqual([s1.p1_name,s1.p2_name],[st[0].name,st[1].name]);
-assert.deepEqual([s2.p1_name,s2.p2_name],[st[2].name,st[3].name]);
+assert.deepEqual([s1.p1_name,s1.p2_name],[st[0].name,st[3].name]);
+assert.deepEqual([s2.p1_name,s2.p2_name],[st[1].name,st[2].name]);
 const fin = am.find(m=>m.match_type==='AMERICANO_FINAL');
 assert.equal(fin.p1_name,'Ganador Semifinal 1');
 Object.assign(s1,{winner:s1.p2_name,p1_score:['3','4',''],p2_score:['6','6','']});
 Object.assign(s2,{winner:s2.p1_name,p1_score:['6','6',''],p2_score:['1','1','']});
 apply(am, L.resolveCategoryMatches(am));
-assert.deepEqual([fin.p1_name,fin.p2_name],[st[1].name,st[2].name]);
+assert.deepEqual([fin.p1_name,fin.p2_name],[st[3].name,st[1].name]);
 assert.ok(fin.round_index > s1.round_index);
 // Con 3 parejas no hay semifinales: final directa
 const am3 = L.generateAmericanoMatches('Y',3,['A','B','C'],false).generatedMatches;
@@ -68,7 +68,7 @@ assert.equal(all[0].match_time, undefined, 'input not mutated');
 // --- Scheduler por categoría ---
 {
   const amer = withIds(L.generateAmericanoMatches('AM',5,['a','b','c','d','e'],false,{withFinal:true}).generatedMatches,'AM');
-  const trad = withIds(L.generateTournamentMatches('TR',8,['1','2','3','4','5','6','7','8'],false).generatedMatches,'TR');
+  const trad = withIds(L.generateTournamentMatches('TR',8,['1','2','3','4','5','6','7','8'],false, { cross: false }).generatedMatches,'TR');
   const other = [{id:'o1',category_id:'OT',match_type:'AMERICANO',p1_name:'x',p2_name:'y',match_date:'2026-11-01',match_time:'09:00:00',court_id:'c1',round_index:0}];
   const cats=[{id:'AM',name:'Demo'},{id:'TR',name:'5ta'},{id:'OT',name:'Otra'}];
   const cfg={daysConfig:[{date:'2026-11-01',startTime:'09:00',endTime:'23:00',phase:'grupos'}],matchDurationMin:60,courts:[{id:'c1'},{id:'c2'}]};
@@ -122,7 +122,7 @@ assert.equal(all[0].match_time, undefined, 'input not mutated');
   assert.ok(t(fin) >= t(C[0]) + 3600000, 'la final va después incluso de partidos ya jugados');
 
   // Tradicional con días de semis y finales
-  const T = withIds(L.generateTournamentMatches('TT',16,Array.from({length:16},(_,i)=>`P${i} & Q${i}`),false).generatedMatches,'TT');
+  const T = withIds(L.generateTournamentMatches('TT',16,Array.from({length:16},(_,i)=>`P${i} & Q${i}`),false, { cross: false }).generatedMatches,'TT');
   const r3 = L.generateGlobalSchedule(T,[{id:'TT',name:'4ta'}],{daysConfig:[day('grupos','09:00','23:00','2026-11-01'),day('semis','09:00','13:00','2026-11-02'),day('finals','16:00','20:00','2026-11-02')],matchDurationMin:60,courts,categoryIds:['TT']});
   assert.equal(r3.unscheduled,0);
   const semis=r3.matches.filter(m=>m.match_type==='BRACKET'&&m.round_index===3), fn=r3.matches.find(m=>m.round_index===4);

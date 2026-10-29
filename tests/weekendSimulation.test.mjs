@@ -33,7 +33,7 @@ for (const m of all.filter(m=>m.match_type==='AMERICANO')){ let s1=[],s2=[]; let
 for (const c of cats){ const cm=all.filter(m=>m.category_id===c.id); L.resolveCategoryMatches(cm).forEach(u=>Object.assign(all.find(m=>m.id===u.matchId),u.updates));
   const st=L.calculateAmericanoStandings(c.pairs,all.filter(m=>m.category_id===c.id&&m.match_type==='AMERICANO'));
   const fin=all.find(m=>m.category_id===c.id&&m.match_type==='AMERICANO_FINAL');
-  const semi=all.find(m=>m.category_id===c.id&&m.round_name==='Semifinal 1'); assert.equal(semi.p1_name,st[0].name); assert.equal(semi.p2_name,st[1].name); assert.equal(fin.p1_name,'Ganador Semifinal 1'); assert.ok(fin.match_date,'final mantiene horario');
+  const semi=all.find(m=>m.category_id===c.id&&m.round_name==='Semifinal 1'); assert.equal(semi.p1_name,st[0].name); assert.equal(semi.p2_name,st[3].name); assert.equal(fin.p1_name,'Ganador Semifinal 1'); assert.ok(fin.match_date,'final mantiene horario');
 
 }
 assert.equal(problems.length,0); assert.equal(unscheduled,0);

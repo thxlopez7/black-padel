@@ -32,7 +32,7 @@ const apply = (all, changes) => {
 function build() {
   const am = withIds(L.generateAmericanoMatches('AM', 5, amPairs, false).generatedMatches);
   const padded = [...trPairs, 'BYE'];
-  const tr = withIds(L.generateTournamentMatches('TR', 10, padded, false).generatedMatches);
+  const tr = withIds(L.generateTournamentMatches('TR', 10, padded, false, { cross: false }).generatedMatches);
   return [...am, ...tr];
 }
 
@@ -158,7 +158,7 @@ test('pareja de último momento: tradicional ocupa el pase libre y el cuadro se 
 
 test('pareja de último momento: tradicional completo crece al cuadro siguiente', () => {
   const ten = [...trPairs, 'T18 & T19'];
-  let all = withIds(L.generateTournamentMatches('TR', 10, ten, false).generatedMatches);
+  let all = withIds(L.generateTournamentMatches('TR', 10, ten, false, { cross: false }).generatedMatches);
   all = merge(all, L.generateGlobalSchedule(all, categories, { ...config, categoryIds: ['TR'] }).changed);
   // Se juegan dos zonas antes
   all.filter(m => m.match_type === 'ZONE').slice(0, 2).forEach(m => Object.assign(m, { winner: m.p1_name, p1_score: ['6', '6', ''], p2_score: ['1', '1', ''] }));

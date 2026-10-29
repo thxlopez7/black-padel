@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabase";
 import { getCategories, getCourts, getPlayers, getMatches, addCategory, deleteCategory, addCourt, deleteCourt, updateCategory, saveGeneratedMatches, deleteMatchesByCategory, deleteMatchesByIds, updateMatch, getSession, logoutAdmin } from "../lib/supabaseService";
-import { generateTournamentMatches, generateAmericanoMatches, resolveCategoryMatches, generateGlobalSchedule, addLatePair, swapZonePairs, renamePairInMatches, normalizePairName, samePair, BRACKET_MAPS } from "../lib/tournamentLogic";
+import { generateTournamentMatches, generateAmericanoMatches, resolveCategoryMatches, generateGlobalSchedule, addLatePair, swapZonePairs, renamePairInMatches, normalizePairName, samePair } from "../lib/tournamentLogic";
 import BracketView from "./BracketView";
 import AmericanoView from "./AmericanoView";
 import AdminPlayers from "./AdminPlayers";
@@ -15,7 +15,8 @@ import { PromptModal, Toast } from "./UIComponents";
 import { toLocalDateString, addDays, formatMatchSchedule } from "../lib/format";
 
 const MIN_AMERICANO_PAIRS = 3;
-const BRACKET_SIZES = Object.keys(BRACKET_MAPS).map(Number).sort((a, b) => a - b);
+// Tradicional: cantidad exacta de parejas (con impar, un BYE en cada uno de los dos partidos de zona)
+const BRACKET_SIZES = Array.from({ length: 29 }, (_, i) => i + 4);
 
 const pairLabel = (p) => normalizePairName(`${p.name}${p.partner ? ' & ' + p.partner : ''}`);
 // Menor tamaño de cuadro disponible que admite la cantidad de parejas
@@ -494,7 +495,7 @@ function AdminSetup({ category, players, categoryMatches = [], onAddLatePair, on
             </div>
 
             <p className="mt-3 pt-3 border-t border-red-900/30 text-xs text-gray-300">
-              Después: semis (1º vs 2º, 3º vs 4º) y final.
+              Después: semis (1º vs 4º, 2º vs 3º) y final.
             </p>
           </div>
         ) : (
@@ -505,11 +506,12 @@ function AdminSetup({ category, players, categoryMatches = [], onAddLatePair, on
                   Modalidad tradicional: zonas y cuadro eliminatorio
                 </span>
                 <p className="text-xs text-gray-400 mt-1">
-                  Zonas y cuadro eliminatorio.
+                  Dos partidos de zona: primero de a dos y después ganador contra perdedor de otra zona.
+                  Con cantidad impar hay un BYE en cada ronda. Pasa al cuadro quien gana el 2º partido.
                 </p>
               </div>
               <div className="w-full sm:w-36 flex-shrink-0">
-                <label className="block text-gray-500 text-[9px] uppercase tracking-widest mb-1 font-bold">Tamaño del cuadro</label>
+                <label className="block text-gray-500 text-[9px] uppercase tracking-widest mb-1 font-bold">Parejas</label>
                 <select value={numPairs} onChange={handleNumPairsChange} className="w-full bg-gray-950 border border-gray-800 text-white rounded p-2 focus:border-red-600 outline-none cursor-pointer text-sm font-mono">
                   {BRACKET_SIZES.map(n => <option key={n} value={n}>{n} Parejas</option>)}
                 </select>
@@ -677,7 +679,7 @@ export default function TournamentApp({ initialCategories }) {
     if (tournamentType === 'americano' && named.length < MIN_AMERICANO_PAIRS) {
       return `El formato americano requiere al menos ${MIN_AMERICANO_PAIRS} parejas.`;
     }
-    if (tournamentType !== 'americano' && named.length < 2) return "Se necesitan al menos 2 parejas.";
+    if (tournamentType !== 'americano' && named.length < 4) return "El formato tradicional necesita al menos 4 parejas.";
 
     let generatedMatches;
     try {
@@ -691,7 +693,7 @@ export default function TournamentApp({ initialCategories }) {
     if (!(await deleteMatchesByCategory(categoryId))) return "No se pudieron borrar los partidos anteriores.";
     if (!(await saveGeneratedMatches(generatedMatches))) return "No se pudieron guardar los partidos generados.";
     const step = tournamentType === 'americano' ? 'americano' : 'bracket';
-    const storedPairs = tournamentType === 'americano' ? named.length : numPairs;
+    const storedPairs = named.length;
     const updatedCat = await updateCategory(categoryId, { num_pairs: storedPairs, current_step: step });
     if (!updatedCat) return "Los partidos se guardaron, pero no se pudo actualizar el estado de la categoría.";
     setCategories(prev => prev.map(c => (c.id === categoryId ? { ...c, ...updatedCat } : c)));
@@ -1025,7 +1027,7 @@ export default function TournamentApp({ initialCategories }) {
             {/* Columna Izquierda */}
             <div className="lg:col-span-8 flex flex-col gap-6">
               <div className="rounded-2xl overflow-hidden shadow-2xl border border-gray-800 bg-gray-950/80 backdrop-blur-sm flex justify-center">
-                <img src="/flyer.png" alt="Flyer Black Padel" className="w-full max-w-2xl h-auto object-contain" onError={(e) => { e.currentTarget.parentElement.style.display = "none"; }} />
+                <img src="/flyer.jpeg" alt="Flyer Black Padel" className="w-full max-w-2xl h-auto object-contain" onError={(e) => { e.currentTarget.parentElement.style.display = "none"; }} />
               </div>
               <div className="bg-gray-900/80 backdrop-blur-md border border-gray-800 rounded-2xl p-6 shadow-xl">
                 <h2 className="text-2xl font-title text-white mb-6 border-b border-gray-800 pb-3 uppercase tracking-wider">Categorías <span className="font-bold text-red-500">del torneo</span></h2>

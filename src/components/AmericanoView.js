@@ -315,11 +315,11 @@ export default function AmericanoView({ category, allMatches, courts, mode, onBa
               </div>
             </div>
 
-            {/* SEMIFINALES: 1º vs 2º y 3º vs 4º de la tabla */}
+            {/* SEMIFINALES: 1º vs 4º y 2º vs 3º de la tabla */}
             {semiMatches.length > 0 && (
               <div className="bg-gray-900 border border-gray-700 rounded-2xl p-5 shadow-2xl mt-2">
                 <h4 className="text-sm font-bold text-white uppercase tracking-wider mb-1">Semifinales</h4>
-                <p className="text-[11px] text-gray-400 mb-3">1º vs 2º · 3º vs 4º</p>
+                <p className="text-[11px] text-gray-400 mb-3">1º vs 4º · 2º vs 3º</p>
                 <div className="space-y-3">
                   {semiMatches.map(m => (
                     <div key={m.id}>
