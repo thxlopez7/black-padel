@@ -659,7 +659,8 @@ export function resolveCategoryMatches(catMatches) {
     // --- 2º partido: cruces ganador/perdedor y clasificados al cuadro ---
     // El 2º partido ya es eliminatorio: se llama como la ronda anterior a la primera del cuadro (Octavos antes de Cuartos)
     const crossRound = crossRoundName(bracket.filter(m => m.round_index === firstRound).length * 2);
-    crosses.forEach((c, i) => setFields(c, { round_name: `${crossRound} ${ALPHABET[i]}` }));
+    // Con el cuadro armado a mano, los nombres quedan como los fijó el organizador (el cuadro ya no sigue los tamaños estándar)
+    if (!manualBracket) crosses.forEach((c, i) => setFields(c, { round_name: `${crossRound} ${ALPHABET[i]}` }));
     // Un cruce fijado a mano conserva sus parejas, pero sus lugares "Zona B 1º" se completan con el resultado de esa zona
     crossPairings(zones).forEach(([p1, p2], i) => {
       const c = crosses[i];
