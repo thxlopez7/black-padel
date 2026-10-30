@@ -736,9 +736,12 @@ const playersOf = (pairName) =>
   isPlaceholder(pairName) ? [] : pairName.split('&').map(n => n.trim().toLowerCase()).filter(Boolean);
 
 // Instancias que admite cada tipo de jornada
+// "zonas": solo el 1º partido de zona del tradicional y las fechas del americano.
+// "grupos": además los 2º partidos (octavos/cuartos del cruce) y las rondas previas a semis.
 export const DAY_PHASES = {
-  todas: ['grupos', 'semis', 'finals'],
-  grupos: ['grupos'],
+  todas: ['zonas', 'grupos', 'semis', 'finals'],
+  zonas: ['zonas'],
+  grupos: ['zonas', 'grupos'],
   playoffs: ['semis', 'finals'],
   semis: ['semis'],
   finals: ['finals']
@@ -925,6 +928,7 @@ export function generateGlobalSchedule(allMatches, categories, config) {
   const getPhase = (m) => {
     if (m.match_type === 'AMERICANO_FINAL') return 'finals';
     if (m.match_type === 'AMERICANO_SEMI') return 'semis';
+    if (m.match_type === 'ZONE' || m.match_type === 'AMERICANO') return 'zonas';
     if (m.match_type !== 'BRACKET') return 'grupos';
     const max = catMaxRound[m.category_id];
     if (m.round_index === max) return 'finals';
@@ -966,9 +970,9 @@ export function generateGlobalSchedule(allMatches, categories, config) {
   // las mejores categorías ocupan los horarios más tardíos. Dentro de una categoría se respeta el orden de rondas.
   // En una jornada dedicada solo a semis o solo a finales se llena de atrás hacia adelante empezando por la
   // mejor categoría: así la mejor juega el último turno y las demás quedan escalonadas antes.
-  const PHASE_ORDER = { grupos: 0, semis: 1, finals: 2 };
+  const PHASE_ORDER = { zonas: 0, grupos: 1, semis: 2, finals: 3 };
   const dedicated = (s, phase) => s.phases.length === 1 && s.phases[0] === phase;
-  const latestFirst = (phase) => phase !== 'grupos' && slots.some(s => dedicated(s, phase));
+  const latestFirst = (phase) => (phase === 'semis' || phase === 'finals') && slots.some(s => dedicated(s, phase));
   const strengthOrder = (a, b) => (latestFirst(getPhase(a)) ? 1 : -1) * (getCatStrength(a.category_id) - getCatStrength(b.category_id));
   const ordered = [...toSchedule].sort((a, b) =>
     PHASE_ORDER[getPhase(a)] - PHASE_ORDER[getPhase(b)] ||

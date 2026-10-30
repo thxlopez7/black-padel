@@ -34,11 +34,12 @@ function nextWeekday(weekday) {
   return toLocalDateString(new Date(today.getFullYear(), today.getMonth(), today.getDate() + ((weekday - today.getDay() + 7) % 7)));
 }
 
-// Viernes de noche con 4 partidos por cancha (el fuerte es el sábado), sábado completo para grupos y
+// Viernes y sábado a la mañana solo zonas; sábado a la tarde cruces y rondas previas;
 // domingo con semifinales a la mañana y finales a la tarde
 const weekendTemplate = (friday) => [
-  { date: friday, startTime: '19:00', endTime: '00:00', phase: 'grupos', maxMatches: 12 },
-  { date: addDays(friday, 1), startTime: '10:00', endTime: '00:00', phase: 'grupos', maxMatches: '' },
+  { date: friday, startTime: '19:00', endTime: '00:00', phase: 'zonas', maxMatches: 12 },
+  { date: addDays(friday, 1), startTime: '10:00', endTime: '13:00', phase: 'zonas', maxMatches: '' },
+  { date: addDays(friday, 1), startTime: '13:00', endTime: '00:00', phase: 'grupos', maxMatches: '' },
   { date: addDays(friday, 2), startTime: '11:00', endTime: '15:00', phase: 'semis', maxMatches: '' },
   { date: addDays(friday, 2), startTime: '15:00', endTime: '19:00', phase: 'finals', maxMatches: '' }
 ];
@@ -236,6 +237,7 @@ function AdminGlobalScheduleSetup({ matches, categories, courts, onBack, onGener
                    <label className="block text-gray-600 text-[9px] uppercase tracking-widest mb-1">Instancias</label>
                    <select value={day.phase} onChange={e => updateDay(idx, 'phase', e.target.value)} className="w-full bg-gray-900 border border-gray-800 text-white rounded p-2 focus:border-red-600 outline-none text-sm">
                      <option value="todas">Todas las instancias</option>
+                     <option value="zonas">Solo zonas (1º partido y fechas)</option>
                      <option value="grupos">Grupos y rondas previas</option>
                      <option value="playoffs">Semifinales y finales</option>
                      <option value="semis">Solo semifinales</option>

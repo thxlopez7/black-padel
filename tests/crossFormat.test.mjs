@@ -392,3 +392,14 @@ test('cruce fijado a mano: sus lugares de zona se completan al cargar la zona', 
   playAll(all);
   assert.ok(real(of(all, 'BRACKET').at(-1).winner));
 });
+
+test('horarios: jornada "zonas" solo admite 1º partido de zona y fechas del americano', () => {
+  const all = resolve(build(8));
+  const res = L.generateGlobalSchedule(all, [{ id: 'C', name: '7ma' }], {
+    daysConfig: [{ date: '2026-11-06', startTime: '19:00', endTime: '23:00', phase: 'zonas' }, { date: '2026-11-07', startTime: '13:00', endTime: '23:00', phase: 'grupos' }, { date: '2026-11-08', startTime: '10:00', endTime: '20:00', phase: 'playoffs' }],
+    matchDurationMin: 60, courts: [{ id: 'c1' }, { id: 'c2' }], categoryIds: ['C']
+  });
+  assert.equal(res.unscheduled, 0);
+  res.matches.filter(m => m.match_date === '2026-11-06').forEach(m => assert.equal(m.match_type, 'ZONE', `${m.round_name} el viernes`));
+  assert.ok(res.matches.filter(m => m.match_type === 'CROSS').every(m => m.match_date === '2026-11-07'));
+});
