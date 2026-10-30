@@ -480,6 +480,8 @@ test('7ma con octavos y cuadro a mano: Ganador Octavos A vs C, Ganador Octavos B
   Object.assign(semiB, { p1_name: 'Ganador Octavos B', p2_name: 'Ganador Cuartos', manual_pairs: true });
   resolve(all);
   assert.deepEqual(crosses.map(c => c.round_name), ['Octavos A', 'Octavos B', 'Octavos C', 'Octavos D', 'Octavos E']);
+  // La vista del cuadro no se rompe: sin tabla de clasificados
+  assert.deepEqual(L.crossStandings(all).rows, []);
   assert.deepEqual([semiA.p1_name, semiA.p2_name], ['Ganador Octavos A', 'Ganador Octavos C']);
   of(all, 'ZONE').filter(z => !z.is_bye).forEach(z => play(z, 1));
   resolve(all);

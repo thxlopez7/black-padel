@@ -195,7 +195,8 @@ export function crossStandings(catMatches) {
   const zones = catMatches.filter(m => m.match_type === 'ZONE');
   const crosses = catMatches.filter(m => m.match_type === 'CROSS').sort((a, b) => a.match_index - b.match_index);
   const bracket = catMatches.filter(m => m.match_type === 'BRACKET');
-  if (crosses.length === 0 || bracket.length === 0) return { rows: [], pending: [], final: true };
+  // Con el cuadro armado a mano cada lugar ya está fijado: no hay tabla que decida quién entra
+  if (crosses.length === 0 || bracket.length === 0 || bracket.some(m => m.manual_pairs)) return { rows: [], pending: [], final: true };
   const firstRound = Math.min(...bracket.map(m => m.round_index));
   const first = bracket.filter(m => m.round_index === firstRound).sort((a, b) => a.match_index - b.match_index);
   const nextRound = bracket.filter(m => m.round_index === firstRound + 1);
