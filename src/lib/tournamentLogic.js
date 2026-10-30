@@ -103,8 +103,11 @@ export function generateTournamentMatches(categoryId, numPairs, pairsList, isRan
   return { pairs, generatedMatches: resolveGenerated(generatedMatches) };
 }
 
-// Nombre del 2º partido de zona: la ronda previa a un cuadro de "size" lugares (8 → Octavos, 4 → Cuartos)
+// Nombre del 2º partido de zona: la ronda previa a un cuadro de "size" lugares (8 → Octavos, 16 → 16avos).
+// Cuando el cuadro empieza en semis (hasta 4 clasificados, por ejemplo 6 parejas) se llama "Zona 2",
+// porque todavía es parte de la fase de zonas y no unos cuartos de final
 export function crossRoundName(size) {
+  if (size <= 4) return 'Zona 2';
   const rounds = Math.log2(Math.max(size, 2)) + 1;
   return getRoundNamesFor(rounds)[0];
 }

@@ -282,12 +282,12 @@ test('horarios no disponibles: el gestor no programa a la pareja en su franja y 
   assert.equal(L.checkMatchEdit(own[0], { match_date: '2026-11-08', match_time: '14:00' }, all, 60, unavailable).warnings.filter(w => w.includes('pidió')).length, 0);
 });
 
-test('el 2º partido se llama como la ronda previa al cuadro: Octavos en 7ma (9), Cuartos en Mix (6)', () => {
+test('el 2º partido se llama como la ronda previa al cuadro: Octavos en 7ma (9), Zona 2 con 6 parejas', () => {
   const septima = resolve(build(9));
   assert.deepEqual(of(septima, 'CROSS').map(c => c.round_name), ['Octavos A', 'Octavos B', 'Octavos C', 'Octavos D', 'Octavos E']);
   assert.equal(of(septima, 'BRACKET')[0].round_name, 'Cuartos A');
   const mix = resolve(build(6));
-  assert.deepEqual(of(mix, 'CROSS').map(c => c.round_name), ['Cuartos A', 'Cuartos B', 'Cuartos C']);
+  assert.deepEqual(of(mix, 'CROSS').map(c => c.round_name), ['Zona 2 A', 'Zona 2 B', 'Zona 2 C']);
   assert.equal(of(mix, 'BRACKET')[0].round_name, 'Semis A');
   assert.equal(of(resolve(build(20)), 'CROSS')[0].round_name, '16avos A');
   assert.equal(of(resolve(build(12)), 'CROSS')[0].round_name, 'Octavos A');
