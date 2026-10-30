@@ -445,7 +445,7 @@ function AdminSetup({ category, players, categoryMatches = [], onAddLatePair, on
   };
 
   // Estimador de partidos para formato americano
-  const americanoMatchesCount = Math.floor((numPairs * (numPairs - 1)) / 2) + (numPairs >= 4 ? 3 : 1); // incluye semifinales y final
+  const americanoMatchesCount = Math.floor((numPairs * (numPairs - 1)) / 2) + (numPairs >= 4 ? 2 : 1); // incluye semifinal y final
   const americanoRoundsCount = numPairs % 2 === 0 ? numPairs - 1 : numPairs;
 
   return (
@@ -513,7 +513,7 @@ function AdminSetup({ category, players, categoryMatches = [], onAddLatePair, on
             </div>
 
             <p className="mt-3 pt-3 border-t border-red-900/30 text-xs text-gray-300">
-              Después: semis (1º vs 4º, 2º vs 3º) y final.
+              Después: semifinal 2º vs 3º y final contra el 1º.
             </p>
           </div>
         ) : (

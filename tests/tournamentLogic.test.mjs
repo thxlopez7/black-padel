@@ -31,25 +31,23 @@ za.winner='B'; apply(X, L.resolveCategoryMatches(X));
 assert.ok(X.some(m=>m.match_type==='BRACKET'&&m.p1_name==='B'));
 assert.ok(!X.some(m=>m.match_type==='BRACKET'&&(m.p1_name==='A'&&m.round_index===1&&m.match_index===0)));
 
-// Americano: semifinales 1º-4º y 2º-3º al terminar las fechas, final entre ganadores
+// Americano: semifinal 2º-3º al terminar las fechas; final del 1º contra el ganador; el 4º queda afuera
 const am = withIds(L.generateAmericanoMatches('Z',5,['A','B','C','D','E'],false).generatedMatches,'Z');
 const reg = am.filter(m=>m.match_type==='AMERICANO');
 const semisOf = () => am.filter(m=>m.match_type==='AMERICANO_SEMI');
-assert.equal(semisOf().length, 2);
+assert.equal(semisOf().length, 1);
 reg[0].winner = reg[0].p1_name; apply(am, L.resolveCategoryMatches(am));
-assert.equal(semisOf()[0].p1_name,'1º Tabla Americano');
+assert.equal(semisOf()[0].p1_name,'2º Tabla Americano');
 reg.forEach(m=>{ m.winner=m.p1_name; m.p1_score=['6','6','']; m.p2_score=['2','2','']; });
 apply(am, L.resolveCategoryMatches(am));
 const st = L.calculateAmericanoStandings(['A','B','C','D','E'], reg);
-const s1 = am.find(m=>m.round_name==='Semifinal 1'), s2 = am.find(m=>m.round_name==='Semifinal 2');
-assert.deepEqual([s1.p1_name,s1.p2_name],[st[0].name,st[3].name]);
-assert.deepEqual([s2.p1_name,s2.p2_name],[st[1].name,st[2].name]);
+const s1 = am.find(m=>m.round_name==='Semifinal');
+assert.deepEqual([s1.p1_name,s1.p2_name],[st[1].name,st[2].name]);
 const fin = am.find(m=>m.match_type==='AMERICANO_FINAL');
-assert.equal(fin.p1_name,'Ganador Semifinal 1');
+assert.deepEqual([fin.p1_name,fin.p2_name],[st[0].name,'Ganador Semifinal']);
 Object.assign(s1,{winner:s1.p2_name,p1_score:['3','4',''],p2_score:['6','6','']});
-Object.assign(s2,{winner:s2.p1_name,p1_score:['6','6',''],p2_score:['1','1','']});
 apply(am, L.resolveCategoryMatches(am));
-assert.deepEqual([fin.p1_name,fin.p2_name],[st[3].name,st[1].name]);
+assert.deepEqual([fin.p1_name,fin.p2_name],[st[0].name,st[2].name]);
 assert.ok(fin.round_index > s1.round_index);
 // Con 3 parejas no hay semifinales: final directa
 const am3 = L.generateAmericanoMatches('Y',3,['A','B','C'],false).generatedMatches;
@@ -111,7 +109,7 @@ assert.equal(all[0].match_time, undefined, 'input not mutated');
   const juan = [...r.matches,...fixedOther].filter(m=>/Juan/.test(m.p1_name+m.p2_name)).map(t).sort((x,y)=>x-y);
   for (let i=1;i<juan.length;i++) assert.ok(juan[i]-juan[i-1] >= 90*60000, 'Juan descanso 30 min entre partidos');
   assert.ok(!r.matches.some(m=>m.court_id==='c3'&&t(m)===t(fixedOther[0])),'turno fijo respetado');
-  assert.ok(r.summary.CA.scheduled===9 && r.summary.CB.scheduled===9, 'resumen por categoría');
+  assert.ok(r.summary.CA.scheduled===8 && r.summary.CB.scheduled===8, 'resumen por categoría');
 
   // Partidos ya jugados conservan su horario
   const C = withIds(L.generateAmericanoMatches('CC',4,['a & b','c & d','e & f','g & h'],false).generatedMatches,'CC');

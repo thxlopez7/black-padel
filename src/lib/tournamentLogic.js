@@ -1,9 +1,8 @@
 export const POINTS_PER_WIN = 3;
 
-// Semifinales del americano: 1º contra 4º y 2º contra 3º de la tabla
+// Semifinal del americano: 2º contra 3º de la tabla; el 1º va directo a la final y el 4º en adelante queda afuera
 export const AMERICANO_SEMIS = [
-  { name: 'Semifinal 1', seeds: [1, 4] },
-  { name: 'Semifinal 2', seeds: [2, 3] }
+  { name: 'Semifinal', seeds: [2, 3] }
 ];
 const AMERICANO_PLAYOFF = ['AMERICANO_SEMI', 'AMERICANO_FINAL'];
 
@@ -385,7 +384,7 @@ export function generateAmericanoMatches(categoryId, numPairs, pairsList, isRand
     current = [fixed, last, ...rest];
   }
 
-  // Fase final: con 4 o más parejas, semifinales 1º vs 4º y 2º vs 3º y final entre los ganadores;
+  // Fase final: con 4 o más parejas, semifinal 2º vs 3º y final del 1º contra el ganador;
   // con 3 parejas, final directa 1º vs 2º (puede desactivarse con withFinal: false)
   if (options.withFinal !== false) {
     const playoff = (type, round, name, p1, p2) => generatedMatches.push({
@@ -395,7 +394,7 @@ export function generateAmericanoMatches(categoryId, numPairs, pairsList, isRand
     });
     if (pairs.length >= 4) {
       AMERICANO_SEMIS.forEach(({ name, seeds }) => playoff('AMERICANO_SEMI', totalRounds, name, `${seeds[0]}º Tabla Americano`, `${seeds[1]}º Tabla Americano`));
-      playoff('AMERICANO_FINAL', totalRounds + 1, 'Final', `Ganador ${AMERICANO_SEMIS[0].name}`, `Ganador ${AMERICANO_SEMIS[1].name}`);
+      playoff('AMERICANO_FINAL', totalRounds + 1, 'Final', '1º Tabla Americano', `Ganador ${AMERICANO_SEMIS[0].name}`);
     } else {
       playoff('AMERICANO_FINAL', totalRounds, 'Final', '1º Tabla Americano', '2º Tabla Americano');
     }
@@ -618,7 +617,7 @@ export function resolveCategoryMatches(catMatches) {
         if (semi) assignPair(semi, seed(seeds[0]), seed(seeds[1]));
       });
       const winnerOf = (name) => semis.find(m => m.round_name === name)?.winner || `Ganador ${name}`;
-      assignPair(finalMatch, winnerOf(AMERICANO_SEMIS[0].name), winnerOf(AMERICANO_SEMIS[1].name));
+      assignPair(finalMatch, seed(1), winnerOf(AMERICANO_SEMIS[0].name));
     } else {
       assignPair(finalMatch, seed(1), seed(2));
     }

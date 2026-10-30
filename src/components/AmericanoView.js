@@ -315,11 +315,11 @@ export default function AmericanoView({ unavailable = [], category, allMatches, 
               </div>
             </div>
 
-            {/* SEMIFINALES: 1º vs 4º y 2º vs 3º de la tabla */}
+            {/* SEMIFINAL: 2º vs 3º de la tabla; el 1º espera en la final y el 4º queda afuera */}
             {semiMatches.length > 0 && (
               <div className="bg-gray-900 border border-gray-700 rounded-2xl p-5 shadow-2xl mt-2">
-                <h4 className="text-sm font-bold text-white uppercase tracking-wider mb-1">Semifinales</h4>
-                <p className="text-[11px] text-gray-400 mb-3">1º vs 4º · 2º vs 3º</p>
+                <h4 className="text-sm font-bold text-white uppercase tracking-wider mb-1">Semifinal</h4>
+                <p className="text-[11px] text-gray-400 mb-3">2º vs 3º de la tabla. El 1º pasa directo a la final por terminar primero y el 4º queda eliminado.</p>
                 <div className="space-y-3">
                   {semiMatches.map(m => (
                     <div key={m.id}>
@@ -341,7 +341,7 @@ export default function AmericanoView({ unavailable = [], category, allMatches, 
                   <svg className="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1.323l3.954 1.582 1.599-.8a1 1 0 011.104 1.664l-1.01 1.01a6.002 6.002 0 01-3.647 5.2V14h1a1 1 0 110 2H6a1 1 0 110-2h1v-2.02a6.002 6.002 0 01-3.647-5.2l-1.01-1.01A1 1 0 013.447 4.1l1.599.8L9 3.323V3a1 1 0 011-1zm-1 9.948V14h2v-2.052a4.002 4.002 0 000-7.896V3.708L8 4.708l-1.5 1.5A4.002 4.002 0 009 11.948z" clipRule="evenodd" />
                   </svg>
-                  {semiMatches.length > 0 ? 'Final: ganadores de las semifinales' : 'Final: 1º contra 2º'}
+                  {semiMatches.length > 0 ? 'Final: 1º de la tabla contra el ganador de la semifinal' : 'Final: 1º contra 2º'}
                 </h4>
                 <div className="space-y-3">
                   {finalMatches.map(m => (

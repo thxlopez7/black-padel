@@ -81,7 +81,7 @@ test('fin de semana viernes-sábado-domingo con tope el viernes', () => {
   const semis = real.filter(m => m.round_name.startsWith('Semis') || m.round_name.startsWith('Final') || m.match_type.startsWith('AMERICANO_'));
   assert.ok(semis.every(m => m.match_date === '2026-11-01'));
   assert.ok(sunday.every(m => semis.includes(m)));
-  assert.equal(sunday.length, 6); // semis y final de cada categoría
+  assert.equal(sunday.length, 5); // semis y final de cada categoría (el americano tiene una sola semifinal)
 });
 
 test('cruce de medianoche: cierre 01:00 deja turno a las 00:00 del día siguiente', () => {
@@ -109,7 +109,7 @@ test('pareja de último momento: americano con descanso y cascada de horarios', 
   assert.ok(res.inserts.every(m => m.round_index <= 4));
   // Las 5 fechas alcanzan: semifinales y final siguen detrás (fechas 6 y 7)
   const roundOf = (type) => amBefore.filter(m => m.match_type === type).map(m => res.updates.find(u => u.matchId === m.id)?.updates.round_index ?? m.round_index);
-  assert.deepEqual(roundOf('AMERICANO_SEMI'), [5, 5]);
+  assert.deepEqual(roundOf('AMERICANO_SEMI'), [5]);
   assert.deepEqual(roundOf('AMERICANO_FINAL'), [6]);
 
   all = apply(all, res.updates);

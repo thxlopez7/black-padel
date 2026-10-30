@@ -135,26 +135,26 @@ test('americano: semifinales, final, correcciones y W.O.', () => {
   // Con fechas pendientes las semis no se arman
   regular.slice(0, 9).forEach(m => play(m));
   resolve(all);
-  assert.equal(all.find(m => m.round_name === 'Semifinal 1').p1_name, '1º Tabla Americano');
+  assert.equal(all.find(m => m.round_name === 'Semifinal').p1_name, '2º Tabla Americano');
   // Último partido por W.O.
   Object.assign(regular[9], { winner: regular[9].p2_name, is_wo: true });
   resolve(all);
   const st = L.calculateAmericanoStandings(pairs, regular);
-  const s1 = all.find(m => m.round_name === 'Semifinal 1');
-  const s2 = all.find(m => m.round_name === 'Semifinal 2');
-  assert.deepEqual([s1.p1_name, s1.p2_name, s2.p1_name, s2.p2_name], [0, 3, 1, 2].map(i => st[i].name));
-  assert.ok(![s1, s2].some(m => [m.p1_name, m.p2_name].includes(st[4].name)), 'el 5º queda eliminado');
-  play(s1, 2); play(s2, 1);
-  resolve(all);
+  const s1 = all.find(m => m.round_name === 'Semifinal');
   const final = all.find(m => m.match_type === 'AMERICANO_FINAL');
-  assert.deepEqual([final.p1_name, final.p2_name], [s1.p2_name, s2.p1_name]);
+  assert.deepEqual([s1.p1_name, s1.p2_name], [st[1].name, st[2].name]);
+  assert.equal(final.p1_name, st[0].name, 'el 1º va directo a la final');
+  assert.ok(![s1, final].some(m => [m.p1_name, m.p2_name].includes(st[3].name)), 'el 4º queda eliminado');
+  play(s1, 2);
+  resolve(all);
+  assert.deepEqual([final.p1_name, final.p2_name], [st[0].name, s1.p2_name]);
   play(final);
   resolve(all);
   // Corregir una fecha que cambia la tabla rehace semis y anula la final
-  const before = [s1.p1_name, s1.p2_name, s2.p1_name, s2.p2_name].join('|');
+  const before = [final.p1_name, s1.p1_name, s1.p2_name].join('|');
   regular.filter(m => m.p1_name === st[0].name || m.p2_name === st[0].name).forEach(m => Object.assign(m, { winner: m.p1_name === st[0].name ? m.p2_name : m.p1_name, is_wo: true }));
   resolve(all);
-  const after = [s1.p1_name, s1.p2_name, s2.p1_name, s2.p2_name].join('|');
+  const after = [final.p1_name, s1.p1_name, s1.p2_name].join('|');
   assert.notEqual(after, before);
   assert.equal(final.winner, null);
 });
