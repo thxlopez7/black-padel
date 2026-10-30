@@ -434,7 +434,7 @@ test('Cuadro armado a mano (Suma 9): B1 y C1 directo a semis, cuartos A1 vs B2 y
   assert.deepEqual([final.p1_name, final.p2_name], [zb.p1_name, zb.p2_name]);
 });
 
-test('Cuadro armado a mano sin 2º partido (7ma): A1 vs C1, B1 vs ganador de D1 vs E1', () => {
+test('Cuadro armado a mano sin 2º partido (7ma): Ganador Zona A vs Ganador Zona C, Ganador Zona B vs Ganador Cuartos', () => {
   const all = build(9);
   // Sin 2º partido: quien pierde en zona queda afuera
   of(all, 'CROSS').forEach(c => all.splice(all.indexOf(c), 1));
@@ -444,18 +444,21 @@ test('Cuadro armado a mano sin 2º partido (7ma): A1 vs C1, B1 vs ganador de D1 
   cuartos.filter(m => m !== keep).forEach(m => all.splice(all.indexOf(m), 1));
   const [semiA, semiB] = bracket.filter(m => m.round_name.startsWith('Semis'));
   const final = bracket.find(m => m.round_name === 'Final');
-  Object.assign(keep, { p1_name: 'Zona D 1º', p2_name: 'Zona E 1º', manual_pairs: true });
-  Object.assign(semiA, { p1_name: 'Zona A 1º', p2_name: 'Zona C 1º', manual_pairs: true });
-  Object.assign(semiB, { p1_name: 'Zona B 1º', p2_name: 'Ganador Cuartos B', manual_pairs: true });
+  Object.assign(keep, { round_name: 'Cuartos', p1_name: 'Ganador Zona E', p2_name: 'Ganador Zona D', manual_pairs: true });
+  Object.assign(semiA, { p1_name: 'Ganador Zona A', p2_name: 'Ganador Zona C', manual_pairs: true });
+  Object.assign(semiB, { p1_name: 'Ganador Zona B', p2_name: 'Ganador Cuartos', manual_pairs: true });
   resolve(all);
+  assert.deepEqual([semiA.p1_name, semiA.p2_name], ['Ganador Zona A', 'Ganador Zona C']);
   assert.deepEqual([final.p1_name, final.p2_name], ['Ganador Semis A', 'Ganador Semis B']);
   const zones = of(all, 'ZONE');
+  // La zona E tiene BYE: su ganador ya se conoce
+  assert.equal(keep.p1_name, zones[4].p1_name);
   zones.filter(z => !z.is_bye).forEach(z => play(z, 1));
   resolve(all);
   const w = (i) => zones[i].winner;
-  assert.deepEqual([keep.p1_name, keep.p2_name], [w(3), w(4)]);
+  assert.deepEqual([keep.p1_name, keep.p2_name], [w(4), w(3)]);
   assert.deepEqual([semiA.p1_name, semiA.p2_name], [w(0), w(2)]);
-  play(keep, 2);
+  play(keep, 1);
   resolve(all);
   assert.deepEqual([semiB.p1_name, semiB.p2_name], [w(1), w(4)]);
   play(semiA, 1); play(semiB, 2);

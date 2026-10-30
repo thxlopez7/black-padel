@@ -645,7 +645,8 @@ export function resolveCategoryMatches(catMatches) {
     const z = n?.match(/^Zona ([A-Z]+) ([12])º$/);
     if (z) return zoneResult[`${z[2] === '1' ? 'W' : 'L'}${z[1]}`] ?? n;
     const g = n?.match(/^Ganador (.+)$/);
-    return g ? all.find(x => x.round_name === g[1] && x.winner && x.winner !== 'BYE')?.winner ?? n : n;
+    // "Ganador Zona A" toma el ganador del 1º partido de esa zona (las zonas se guardan como "ZONA A")
+    return g ? all.find(x => x.round_name.toLowerCase() === g[1].toLowerCase() && x.winner && x.winner !== 'BYE')?.winner ?? n : n;
   };
 
   const bracket = all.filter(m => m.match_type === 'BRACKET');
