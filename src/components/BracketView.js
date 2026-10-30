@@ -26,10 +26,39 @@ export default function BracketView({ unavailable = [], category, allMatches, co
 
   // El cuadro se muestra completo desde el sorteo; los nombres avanzan a medida que se cargan resultados
   const visibleRounds = bracketByRound;
-  // Con dos partidos de zona, quien pasa directo aparece en la ronda siguiente: no se muestran partidos contra BYE
-  const hideByeCards = crosses.length > 0;
+  // Con dos partidos de zona, el pase libre a la final se muestra en las semis explicando por qué; en rondas anteriores no se muestra
+  const byeCards = crosses.length > 0;
   // Orden de los ganadores del 2º partido: define quién pasa directo y quién juega la ronda previa
   const standings = crossStandings(matches);
+  // Cuadro armado a mano por el organizador: la tabla de clasificados no decide quién entra a cada lugar
+  const manualBracket = bracketMatches.some(m => m.manual_pairs);
+  // Explicación para los jugadores: cómo se ordenan los clasificados y a qué ronda entra cada puesto
+  const standingsNote = (rows) => {
+    const places = (list) => list.map(r => `${r.pos}º`).join(list.length > 2 ? ', ' : ' y ').replace(/, ([^,]*)$/, ' y $1');
+    const art = (d) => (/^(Cuartos|Octavos|Dieciseisavos)/.test(d) ? 'los' : 'la');
+    const groups = [];
+    rows.forEach(r => {
+      const dest = r.destination.replace(/^Directo a /, '').replace(/ [A-Z]$/, '');
+      const g = groups.find(x => x.dest === dest && x.direct === r.destination.startsWith('Directo'));
+      if (g) g.rows.push(r); else groups.push({ dest, direct: r.destination.startsWith('Directo'), rows: [r] });
+    });
+    const parts = groups.map(g => g.direct
+      ? `${places(g.rows)} ${g.rows.length > 1 ? 'pasan' : 'pasa'} directo a ${art(g.dest)} ${g.dest}`
+      : `${places(g.rows)} ${g.rows.length > 1 ? 'juegan' : 'juega'} ${art(g.dest)} ${g.dest}`);
+    const cross = crosses[0]?.round_name.replace(/ [A-Z]$/, '') || '2º partido';
+    const direct = rows.filter(r => r.destination.startsWith('Directo')).length;
+    const played = groups.find(g => !g.direct);
+    const lines = [
+      `¿Quién clasifica? El ganador de cada partido de ${cross}. Quien lo pierde queda afuera, aunque haya ganado en zona.`,
+      `¿Cómo se ordenan? Por partidos ganados: quien ganó en zona y en ${cross.toLowerCase()} (2 ganados) va antes que quien perdió en zona y ganó después (1 ganado). Si empatan, decide un sorteo.`,
+    ];
+    if (direct > 0 && played) {
+      const size = rows.length + direct;
+      lines.push(`¿Por qué hay pase directo? Clasifican ${rows.length} parejas y ${art(played.dest)} ${played.dest} ${art(played.dest) === "los" ? "necesitan" : "necesita"} ${size}. ${direct > 1 ? `Los ${direct} lugares que faltan son pases libres y se los llevan las ${direct} parejas mejor ubicadas` : 'El lugar que falta es un pase libre y se lo lleva la pareja mejor ubicada'} en esta tabla.`);
+    }
+    lines.push(`Resultado: ${parts.join('; ')}.`);
+    return lines;
+  };
 
   const renderChampion = () => {
     const finalRound = visibleRounds[visibleRounds.length - 1];
@@ -78,7 +107,7 @@ export default function BracketView({ unavailable = [], category, allMatches, co
           )}
 
           {/* CLASIFICADOS */}
-          {standings.rows.length > 0 && (
+          {standings.rows.length > 0 && !manualBracket && (
             <div className="flex flex-col justify-center relative min-w-[280px] max-w-[320px]">
               <div className="bg-gray-950 border border-gray-800 rounded-lg overflow-hidden">
                 <div className="text-[0.65rem] font-black tracking-widest uppercase px-4 py-1.5 flex justify-between items-center bg-gray-800 text-red-500 border-b border-gray-700">
@@ -99,13 +128,18 @@ export default function BracketView({ unavailable = [], category, allMatches, co
                   <div className="px-3 py-2 text-[0.62rem] text-gray-500 border-t border-gray-800">Faltan: {standings.pending.join(', ')}</div>
                 )}
               </div>
+              <div className="mt-3 space-y-1.5 text-[0.68rem] leading-relaxed text-gray-400">
+                {standingsNote(standings.rows).map(line => <p key={line}>{line}</p>)}
+              </div>
             </div>
           )}
 
           {/* BRACKET */}
           {visibleRounds.map((round, rIndex) => (
             <div key={rIndex} className="flex flex-col justify-center gap-6 relative min-w-[280px]">
-              {round.filter(m => !(hideByeCards && m.is_bye)).map(m => <MatchCard key={m.id} match={m} courts={courts} mode={mode} onEdit={setEditingMatch} />)}
+              {round.filter(m => !(byeCards && m.is_bye && !/^Semi/.test(m.round_name))).map(m => (byeCards && m.is_bye
+                ? <ByeCard key={m.id} match={m} qualified={standings.rows.length} places={round.length * 2} />
+                : <MatchCard key={m.id} match={m} courts={courts} mode={mode} onEdit={setEditingMatch} />))}
               {rIndex === visibleRounds.length - 1 && renderChampion()}
             </div>
           ))}
@@ -126,6 +160,24 @@ export default function BracketView({ unavailable = [], category, allMatches, co
           }}
         />
       )}
+    </div>
+  );
+}
+
+// Lugar del cuadro sin rival: quien lo ocupa avanza sin jugar porque clasificaron menos parejas que lugares
+function ByeCard({ match, qualified, places }) {
+  const pair = match.p1_name === 'BYE' ? match.p2_name : match.p1_name;
+  if (!pair || pair === 'BYE') return null;
+  return (
+    <div className="w-[280px] bg-gray-950 border border-dashed border-gray-700 rounded-lg my-4 relative z-10 overflow-hidden">
+      <div className="text-[0.65rem] font-black tracking-widest uppercase px-4 py-1.5 bg-gray-800 text-red-500 border-b border-gray-700">
+        {match.round_name} · Pase libre
+      </div>
+      <div className="px-4 py-2 text-[0.8rem] text-gray-200 font-semibold border-b border-gray-800"><PairName name={pair} /></div>
+      <div className="px-4 py-2 text-[0.8rem] text-gray-500 italic border-b border-gray-800">BYE (sin rival)</div>
+      <p className="px-4 py-2 text-[0.65rem] leading-relaxed text-gray-400">
+        Clasificaron {qualified} parejas y esta ronda tiene {places} lugares: {places - qualified === 1 ? 'el lugar que sobra queda vacío' : `los ${places - qualified} lugares que sobran quedan vacíos`}. Por estar mejor ubicada en la tabla, esta pareja pasa a la ronda siguiente sin jugar.
+      </p>
     </div>
   );
 }

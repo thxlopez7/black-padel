@@ -591,9 +591,11 @@ export function resolveCategoryMatches(catMatches) {
     setFields(m, { ...EMPTY_RESULT, winner });
     return true;
   };
+  // Lugares de un partido fijado a mano ("Zona B 1º", "Ganador Cuartos A"): se completan con el resultado cuando se conoce
+  let manualLabel = (n) => n;
   const assignPair = (m, p1, p2) => {
     // Parejas fijadas a mano por el organizador: la cascada no las reemplaza
-    if (m.manual_pairs) [p1, p2] = [m.p1_name, m.p2_name];
+    if (m.manual_pairs) [p1, p2] = [manualLabel(m.p1_name), manualLabel(m.p2_name)];
     const participantsChanged = m.p1_name !== p1 || m.p2_name !== p2;
     setFields(m, { p1_name: p1, p2_name: p2 });
     if (applyBye(m, p1, p2)) return;
@@ -640,6 +642,13 @@ export function resolveCategoryMatches(catMatches) {
     }
   });
 
+  manualLabel = (n) => {
+    const z = n?.match(/^Zona ([A-Z]+) ([12])º$/);
+    if (z) return zoneResult[`${z[2] === '1' ? 'W' : 'L'}${z[1]}`] ?? n;
+    const g = n?.match(/^Ganador (.+)$/);
+    return g ? all.find(x => x.round_name === g[1] && x.winner && x.winner !== 'BYE')?.winner ?? n : n;
+  };
+
   const bracket = all.filter(m => m.match_type === 'BRACKET');
   const firstRound = bracket.length > 0 ? Math.min(...bracket.map(m => m.round_index)) : 0;
   const crosses = all.filter(m => m.match_type === 'CROSS').sort((a, b) => a.match_index - b.match_index);
@@ -651,15 +660,9 @@ export function resolveCategoryMatches(catMatches) {
     const crossRound = crossRoundName(bracket.filter(m => m.round_index === firstRound).length * 2);
     crosses.forEach((c, i) => setFields(c, { round_name: `${crossRound} ${ALPHABET[i]}` }));
     // Un cruce fijado a mano conserva sus parejas, pero sus lugares "Zona B 1º" se completan con el resultado de esa zona
-    const fromZone = (n) => {
-      const z = n?.match(/^Zona ([A-Z]+) ([12])º$/);
-      return z ? zoneResult[`${z[2] === '1' ? 'W' : 'L'}${z[1]}`] ?? n : n;
-    };
     crossPairings(zones).forEach(([p1, p2], i) => {
       const c = crosses[i];
-      if (!c) return;
-      if (c.manual_pairs) setFields(c, { p1_name: fromZone(c.p1_name), p2_name: fromZone(c.p2_name) });
-      assignPair(c, p1, p2);
+      if (c) assignPair(c, p1, p2);
     });
     const decided = crosses.every(c => c.winner);
     const seeds = decided ? crossQualifiers(zones, crosses).map(s => s.name) : [];

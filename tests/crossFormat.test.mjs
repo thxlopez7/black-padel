@@ -403,3 +403,33 @@ test('horarios: jornada "zonas" solo admite 1º partido de zona y fechas del ame
   res.matches.filter(m => m.match_date === '2026-11-06').forEach(m => assert.equal(m.match_type, 'ZONE', `${m.round_name} el viernes`));
   assert.ok(res.matches.filter(m => m.match_type === 'CROSS').every(m => m.match_date === '2026-11-07'));
 });
+
+test('Cuadro armado a mano (Suma 9): B1 y C1 directo a semis, cuartos A1 vs B2 y A2 vs C2', () => {
+  const all = build(6);
+  const crosses = of(all, 'CROSS');
+  const [semiA, semiB] = of(all, 'BRACKET').filter(m => m.round_name.startsWith('Semis'));
+  // El 3º partido no se juega con este cuadro
+  all.splice(all.indexOf(crosses[2]), 1);
+  Object.assign(crosses[0], { p1_name: 'Zona A 1º', p2_name: 'Zona B 2º', manual_pairs: true });
+  Object.assign(crosses[1], { p1_name: 'Zona A 2º', p2_name: 'Zona C 2º', manual_pairs: true });
+  Object.assign(semiA, { p1_name: 'Zona B 1º', p2_name: 'Ganador Cuartos B', manual_pairs: true });
+  Object.assign(semiB, { p1_name: 'Zona C 1º', p2_name: 'Ganador Cuartos A', manual_pairs: true });
+  resolve(all);
+  assert.deepEqual([semiA.p1_name, semiA.p2_name], ['Zona B 1º', 'Ganador Cuartos B']);
+  assert.equal(semiA.is_bye, false);
+  of(all, 'ZONE').forEach(z => play(z, 1));
+  resolve(all);
+  const [za, zb, zc] = of(all, 'ZONE');
+  assert.deepEqual([crosses[0].p1_name, crosses[0].p2_name], [za.p1_name, zb.p2_name]);
+  assert.deepEqual([crosses[1].p1_name, crosses[1].p2_name], [za.p2_name, zc.p2_name]);
+  assert.equal(semiA.p1_name, zb.p1_name);
+  assert.equal(semiB.p1_name, zc.p1_name);
+  play(crosses[0], 2); play(crosses[1], 1);
+  resolve(all);
+  assert.equal(semiA.p2_name, za.p2_name, 'ganador de A2 vs C2');
+  assert.equal(semiB.p2_name, zb.p2_name, 'ganador de A1 vs B2');
+  play(semiA, 1); play(semiB, 2);
+  resolve(all);
+  const final = of(all, 'BRACKET').find(m => m.round_name === 'Final');
+  assert.deepEqual([final.p1_name, final.p2_name], [zb.p1_name, zb.p2_name]);
+});
