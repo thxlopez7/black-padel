@@ -56,8 +56,20 @@ export function Toast({ message, type = "success", onClose }) {
 }
 
 // Nombre de pareja en dos líneas (un jugador por línea) para que entre completo en pantallas chicas
+// Lugares sin definir escritos para que se entienda de dónde sale cada pareja ("Zona B 1º" -> "Ganador Zona B")
+export function placeLabel(name) {
+  const zone = name.match(/^Zona ([A-Z]+) ([12])º$/);
+  if (zone) return `${zone[2] === '1' ? 'Ganador' : 'Perdedor'} Zona ${zone[1]}`;
+  const table = name.match(/^(\d+)º Tabla Americano$/);
+  if (table) return `${table[1]}º de la tabla`;
+  const seed = name.match(/^(\d+)º Clasificado$/);
+  if (seed) return `${seed[1]}º de la tabla de clasificados`;
+  return name;
+}
+
 export function PairName({ name, fallback = "A definir" }) {
   if (!name) return <span className="italic opacity-60">{fallback}</span>;
+  if (name !== placeLabel(name)) return <span className="break-words italic text-gray-400">{placeLabel(name)}</span>;
   const players = name.split("&").map(p => p.trim()).filter(Boolean);
   if (players.length < 2) return <span className="break-words">{name}</span>;
   return (
