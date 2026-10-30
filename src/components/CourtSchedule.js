@@ -42,7 +42,7 @@ export default function CourtSchedule({ court, courts = [], matches, categories,
         </h2>
 
         {courts.length > 1 && (
-          <div className="flex gap-2 overflow-x-auto pb-2 mb-2">
+          <div className="flex flex-wrap gap-2 pb-2 mb-2">
             {courts.map(c => (
               <button key={c.id} onClick={() => onSelectCourt?.(c.id)} className={`shrink-0 px-3 py-1.5 rounded-full border text-xs font-semibold transition-colors ${c.id === court.id ? 'bg-red-600/15 border-red-600/50 text-red-400' : 'bg-gray-950 border-gray-800 text-gray-400 hover:text-white'}`}>
                 {c.name}
@@ -51,7 +51,7 @@ export default function CourtSchedule({ court, courts = [], matches, categories,
           </div>
         )}
         {days.length > 1 && (
-          <div className="flex gap-2 overflow-x-auto pb-2 mb-4 border-b border-gray-800">
+          <div className="flex flex-wrap gap-2 pb-3 mb-4 border-b border-gray-800">
             {['all', ...days].map(d => (
               <button key={d} onClick={() => setDay(d)} className={`shrink-0 px-3 py-1.5 rounded-full border text-xs font-semibold transition-colors ${d === day ? 'bg-white/10 border-gray-600 text-white' : 'bg-gray-950 border-gray-800 text-gray-400 hover:text-white'}`}>
                 {d === 'all' ? 'Todos los días' : dayLabel(d)}

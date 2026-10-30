@@ -242,15 +242,15 @@ export default function AmericanoView({ unavailable = [], category, allMatches, 
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="bg-gray-950/70 border-b border-gray-800 text-[10px] text-gray-400 font-bold uppercase tracking-wider text-center">
-                      <th className="py-3 px-3 text-center w-12">#</th>
-                      <th className="py-3 px-4 text-left">Pareja</th>
+                      <th className="py-3 px-2 sm:px-3 text-center w-9 sm:w-12">#</th>
+                      <th className="py-3 px-2 sm:px-4 text-left">Pareja</th>
                       <th className="py-3 px-2 w-10" title="Partidos jugados">PJ</th>
                       <th className="py-3 px-2 w-10" title="Partidos ganados">PG</th>
-                      <th className="py-3 px-2 w-10" title="Partidos perdidos">PP</th>
-                      <th className="py-3 px-2 w-12" title="Games a favor">GF</th>
-                      <th className="py-3 px-2 w-12" title="Games en contra">GC</th>
+                      <th className="hidden sm:table-cell py-3 px-2 w-10" title="Partidos perdidos">PP</th>
+                      <th className="hidden sm:table-cell py-3 px-2 w-12" title="Games a favor">GF</th>
+                      <th className="hidden sm:table-cell py-3 px-2 w-12" title="Games en contra">GC</th>
                       <th className="py-3 px-2 w-12" title="Diferencia de games (GF − GC)">DIF</th>
-                      <th className="py-3 px-3 w-16 bg-red-950/20 text-red-400 font-black" title="Puntos: 3 por partido ganado">PTS</th>
+                      <th className="py-3 px-2 sm:px-3 w-12 sm:w-16 bg-red-950/20 text-red-400 font-black" title="Puntos: 3 por partido ganado">PTS</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-800/60 font-medium">
@@ -279,27 +279,27 @@ export default function AmericanoView({ unavailable = [], category, allMatches, 
                             isFirst ? "bg-red-950/10 font-semibold" : ""
                           }`}
                         >
-                          <td className="py-3 px-3 text-center">
+                          <td className="py-3 px-2 sm:px-3 text-center">
                             <span className={`inline-flex items-center justify-center w-6 h-6 rounded-md text-[11px] border ${badgeClass}`}>
                               {medal}
                             </span>
                           </td>
-                          <td className="py-3 px-3 sm:px-4 min-w-[150px] text-white">
+                          <td className="py-3 px-2 sm:px-4 sm:min-w-[150px] text-white">
                             <div className="font-bold flex items-center gap-2">
                               <PairName name={team.name} />
                             </div>
                           </td>
                           <td className="py-3 px-2 text-center text-gray-300">{team.pj}</td>
                           <td className="py-3 px-2 text-center text-green-400 font-bold">{team.pg}</td>
-                          <td className="py-3 px-2 text-center text-red-400/80">{team.pp}</td>
-                          <td className="py-3 px-2 text-center text-gray-300">{team.gf}</td>
-                          <td className="py-3 px-2 text-center text-gray-400">{team.gc}</td>
+                          <td className="hidden sm:table-cell py-3 px-2 text-center text-red-400/80">{team.pp}</td>
+                          <td className="hidden sm:table-cell py-3 px-2 text-center text-gray-300">{team.gf}</td>
+                          <td className="hidden sm:table-cell py-3 px-2 text-center text-gray-400">{team.gc}</td>
                           <td className="py-3 px-2 text-center font-bold">
                             <span className={team.diff > 0 ? "text-green-400" : team.diff < 0 ? "text-red-400" : "text-gray-400"}>
                               {team.diff > 0 ? `+${team.diff}` : team.diff}
                             </span>
                           </td>
-                          <td className="py-3 px-3 text-center bg-red-950/20 font-black text-sm text-red-500">
+                          <td className="py-3 px-2 sm:px-3 text-center bg-red-950/20 font-black text-sm text-red-500">
                             {team.pts}
                           </td>
                         </tr>
