@@ -649,6 +649,7 @@ export function resolveCategoryMatches(catMatches) {
   };
 
   const bracket = all.filter(m => m.match_type === 'BRACKET');
+  const manualBracket = bracket.some(m => m.manual_pairs);
   const firstRound = bracket.length > 0 ? Math.min(...bracket.map(m => m.round_index)) : 0;
   const crosses = all.filter(m => m.match_type === 'CROSS').sort((a, b) => a.match_index - b.match_index);
   let firstRoundPair = null;
@@ -671,6 +672,9 @@ export function resolveCategoryMatches(catMatches) {
     const maxSeeds = decided ? seeds.length : crosses.length;
     const slot = (pos) => (pos > maxSeeds ? 'BYE' : decided ? seeds[pos - 1] : seedLabel(pos));
     firstRoundPair = (m) => [slot(order[m.match_index * 2]), slot(order[m.match_index * 2 + 1])];
+  } else if (manualBracket) {
+    // --- Cuadro armado a mano directo desde las zonas: los lugares fijados se completan solos ---
+    firstRoundPair = (m) => [m.p1_name, m.p2_name];
   } else {
     // --- Formato anterior: Zonas -> Cuadro con plantilla fija ---
     const template = BRACKET_MAPS[zones.length * 2];
@@ -684,7 +688,7 @@ export function resolveCategoryMatches(catMatches) {
   // si el rival es BYE, el lugar pasa directo ("1º Clasificado"); si se juega, "Ganador Cuartos B"
   const advancing = (src) => {
     if (!src) return null;
-    if (src.winner || crosses.length === 0) return src.winner || null;
+    if (src.winner || (crosses.length === 0 && !manualBracket)) return src.winner || null;
     if (src.p2_name === 'BYE' && src.p1_name !== 'BYE') return src.p1_name || null;
     if (src.p1_name === 'BYE' && src.p2_name !== 'BYE') return src.p2_name || null;
     return src.p1_name === 'BYE' ? 'BYE' : `Ganador ${src.round_name}`;

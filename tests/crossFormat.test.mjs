@@ -433,3 +433,32 @@ test('Cuadro armado a mano (Suma 9): B1 y C1 directo a semis, cuartos A1 vs B2 y
   const final = of(all, 'BRACKET').find(m => m.round_name === 'Final');
   assert.deepEqual([final.p1_name, final.p2_name], [zb.p1_name, zb.p2_name]);
 });
+
+test('Cuadro armado a mano sin 2º partido (7ma): A1 vs C1, B1 vs ganador de D1 vs E1', () => {
+  const all = build(9);
+  // Sin 2º partido: quien pierde en zona queda afuera
+  of(all, 'CROSS').forEach(c => all.splice(all.indexOf(c), 1));
+  const bracket = of(all, 'BRACKET');
+  const cuartos = bracket.filter(m => m.round_name.startsWith('Cuartos'));
+  const keep = cuartos.find(m => m.round_name === 'Cuartos B');
+  cuartos.filter(m => m !== keep).forEach(m => all.splice(all.indexOf(m), 1));
+  const [semiA, semiB] = bracket.filter(m => m.round_name.startsWith('Semis'));
+  const final = bracket.find(m => m.round_name === 'Final');
+  Object.assign(keep, { p1_name: 'Zona D 1º', p2_name: 'Zona E 1º', manual_pairs: true });
+  Object.assign(semiA, { p1_name: 'Zona A 1º', p2_name: 'Zona C 1º', manual_pairs: true });
+  Object.assign(semiB, { p1_name: 'Zona B 1º', p2_name: 'Ganador Cuartos B', manual_pairs: true });
+  resolve(all);
+  assert.deepEqual([final.p1_name, final.p2_name], ['Ganador Semis A', 'Ganador Semis B']);
+  const zones = of(all, 'ZONE');
+  zones.filter(z => !z.is_bye).forEach(z => play(z, 1));
+  resolve(all);
+  const w = (i) => zones[i].winner;
+  assert.deepEqual([keep.p1_name, keep.p2_name], [w(3), w(4)]);
+  assert.deepEqual([semiA.p1_name, semiA.p2_name], [w(0), w(2)]);
+  play(keep, 2);
+  resolve(all);
+  assert.deepEqual([semiB.p1_name, semiB.p2_name], [w(1), w(4)]);
+  play(semiA, 1); play(semiB, 2);
+  resolve(all);
+  assert.deepEqual([final.p1_name, final.p2_name], [w(0), w(4)]);
+});
