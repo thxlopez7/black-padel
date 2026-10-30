@@ -37,8 +37,8 @@ function nextWeekday(weekday) {
 // Viernes y sábado a la mañana solo zonas; sábado a la tarde cruces y rondas previas;
 // domingo con semifinales a la mañana y finales a la tarde
 const weekendTemplate = (friday) => [
-  { date: friday, startTime: '19:00', endTime: '00:00', phase: 'zonas', maxMatches: 12 },
-  { date: addDays(friday, 1), startTime: '10:00', endTime: '13:00', phase: 'zonas', maxMatches: '' },
+  { date: friday, startTime: '20:00', endTime: '00:00', phase: 'zonas', maxMatches: 12 },
+  { date: addDays(friday, 1), startTime: '11:00', endTime: '13:00', phase: 'zonas', maxMatches: '' },
   { date: addDays(friday, 1), startTime: '13:00', endTime: '00:00', phase: 'grupos', maxMatches: '' },
   { date: addDays(friday, 2), startTime: '11:00', endTime: '15:00', phase: 'semis', maxMatches: '' },
   { date: addDays(friday, 2), startTime: '15:00', endTime: '19:00', phase: 'finals', maxMatches: '' }
